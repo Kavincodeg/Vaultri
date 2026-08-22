@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,24 +21,33 @@ export async function POST(req: NextRequest) {
 
     if (eventType === 'payment_link.paid') {
       const pl = event.payload?.payment_link?.entity
-      const razorpayId: string = pl?.id ?? ''
+      const paymentObj = event.payload?.payment?.entity
+      const razorpayLinkId: string = pl?.id ?? ''
+      const razorpayPaymentId: string = paymentObj?.id ?? ''
       const notes = pl?.notes ?? {}
       const dealId: string = notes.dealId ?? ''
       const type: string = notes.type ?? ''
 
-      if (razorpayId) {
+      if (razorpayPaymentId) {
+        const existing = await prisma.payment.findUnique({ where: { razorpayPaymentId } })
+        if (existing) {
+          return NextResponse.json({ received: true, idempotent: true })
+        }
+      }
+
+      if (razorpayLinkId) {
         await prisma.payment.updateMany({
-          where: { razorpayId },
-          data: { status: 'paid' },
+          where: { razorpayLinkId },
+          data: { status: 'paid', razorpayPaymentId: razorpayPaymentId || undefined },
         })
       }
 
-      // Update deal status: deposit paid -> in_progress
       if (dealId && type === 'deposit') {
         await prisma.deal.update({
           where: { id: dealId },
           data: { status: 'in_progress' },
         })
+        await logAudit(dealId, 'deposit_received', 'Deposit payment confirmed via Razorpay webhook. Payment ID: ' + razorpayPaymentId)
       }
     }
 

@@ -1,58 +1,50 @@
-﻿"use client"
-import { useSession, signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+'use client'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import Link from 'next/link'
 
 export default function HomePage() {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
 
   useEffect(() => {
-    if (status === "authenticated") router.push("/dashboard")
+    if (status === 'authenticated') router.push('/dashboard')
   }, [status, router])
 
   return (
-    <div className="hero">
-      <div className="hero-eyebrow">
-        <span>🤖</span> Razorpay AI Buildathon — Open Track
-      </div>
-      <h1 className="hero-title">
-        Every sale shouldn&apos;t be <span>an act of faith</span>
-      </h1>
-      <p className="hero-sub">
-        AI-powered contract drafting, deposit collection, and cancellation protection
-        — built for independent sellers who deserve the same safeguards as any business.
+    <div className='hero'>
+      <div className='hero-eyebrow'>🛡️ Suraksha ? Business Protection for Independent Sellers</div>
+      <h1 className='hero-title'>Turn every custom order into <span>a protected deal</span></h1>
+      <p className='hero-sub'>
+        AI-powered deal terms, deposit payment links, automated reminders, and cancellation protection ?
+        built specifically for artisan makers, tailors, bakers, and custom creators in India.
       </p>
-      <button
-        id="btn-get-started"
-        className="btn btn-primary"
-        style={{ fontSize: "1rem", padding: "14px 32px" }}
-        onClick={() => signIn()}
-      >
-        Get Protected →
-      </button>
-
-      <div className="fm-grid">
+      <div style={{ display: 'flex', gap: '16px' }}>
+        <Link href='/auth/signup' className='btn btn-primary' style={{ fontSize: '1rem', padding: '14px 32px' }}>
+          Get Protected Now →
+        </Link>
+        <Link href='/auth/signin' className='btn btn-secondary' style={{ fontSize: '1rem', padding: '14px 28px' }}>
+          Seller Sign In
+        </Link>
+      </div>
+      <div className='fm-grid'>
         {[
-          { icon: "❌", title: "Customer cancels last minute", desc: "Automatic cancellation-fee payment link generated instantly." },
-          { icon: "🎨", title: "Design copied elsewhere", desc: "Contract terms include IP/design clause drafted by AI." },
-          { icon: "⏳", title: "Paid 60 days late", desc: "Late-payment clause in every contract. Reminder flow built in." },
-          { icon: "📄", title: "No written record", desc: "Every deal stores agent-drafted contract text in database." },
+          { icon: '❌', title: 'Customer cancels after completion', desc: 'Generate a cancellation-fee payment link + drafted polite message instantly.' },
+          { icon: '🎨', title: 'Design copied elsewhere', desc: 'AI-drafted deal terms include explicit IP and design ownership rights.' },
+          { icon: '⏳', title: 'Paid 60+ days late', desc: 'Automatic late-payment terms and follow-up payment reminders.' },
+          { icon: '📄', title: 'No written record of terms', desc: 'Immutable audit trail and structured agreement text for every deal.' },
         ].map((fm) => (
-          <div key={fm.title} className="fm-card">
-            <div className="fm-icon">{fm.icon}</div>
-            <div className="fm-title">{fm.title}</div>
-            <div className="fm-desc">{fm.desc}</div>
+          <div key={fm.title} className='fm-card'>
+            <div className='fm-icon'>{fm.icon}</div>
+            <div className='fm-title'>{fm.title}</div>
+            <div className='fm-desc'>{fm.desc}</div>
           </div>
         ))}
       </div>
-
-      <blockquote className="hero-quote">
-        &ldquo;I design and sell jewellery. My pieces take 3 days to make. I&apos;ve had customers cancel
-        after the piece is finished, copy my designs and get them made cheaper elsewhere, and pay
-        me 60 days late. I have no contract, no deposit system, no protection. Every sale is an
-        act of faith — and sometimes faith is expensive.&rdquo;
-        <cite>— PS 30, Independent Jewellery Maker</cite>
+      <blockquote className='hero-quote'>
+        “I design and sell jewellery. My pieces take 3 days to make. I have had customers cancel after the piece is finished, copy my designs, and pay me 60 days late. Suraksha gives me the deposit and contract protection every real business needs.”
+        <cite>— Artisan Seller Quote</cite>
       </blockquote>
     </div>
   )
