@@ -4,7 +4,7 @@
   "installCommand": "npm ci --legacy-peer-deps",
   "regions": ["bom1"],
   "env": {
-    "NEXTAUTH_URL": "https://your-domain.vercel.app"
+    "NEXTAUTH_URL": "https://vaultri.vercel.app"
   },
   "headers": [
     {
