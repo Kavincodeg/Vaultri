@@ -10,7 +10,24 @@ import { enqueueReminder } from '@/lib/queue'
 const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 const resend = new Resend(process.env.RESEND_API_KEY!)
 
-const DISCLAIMER =
+// Retry helper — retries on 503 Service Unavailable with exponential backoff
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn()
+    } catch (err: any) {
+      const is503 = err?.message?.includes('503') || err?.message?.includes('Service Unavailable') || err?.message?.includes('high demand')
+      if (is503 && i < retries - 1) {
+        console.warn(`[Agent] 503 on attempt ${i + 1}, retrying in ${delayMs}ms...`)
+        await new Promise(r => setTimeout(r, delayMs))
+        delayMs *= 2 // exponential backoff
+        continue
+      }
+      throw err
+    }
+  }
+  throw new Error('Max retries exceeded')
+}
   '\n\n[DISCLAIMER]\nThese terms are a plain-language summary to support your agreement, not a substitute for legal advice.'
 
 const TOOLS = [
@@ -297,7 +314,7 @@ export async function runNewDealAgent(input: {
 
   let result: any
   try {
-    result = await model.generateContent(prompt)
+    result = await withRetry(() => model.generateContent(prompt))
   } catch (err: any) {
     // Alert Sentry — doc §9: agent tool-call errors should raise an alert
     Sentry.captureException(err, {
@@ -387,7 +404,7 @@ export async function runCancellationAgent(input: {
 
   let result: any
   try {
-    result = await model.generateContent(prompt)
+    result = await withRetry(() => model.generateContent(prompt))
   } catch (err: any) {
     Sentry.captureException(err, {
       tags: { context: 'gemini_agent', agent: 'cancellation' },
