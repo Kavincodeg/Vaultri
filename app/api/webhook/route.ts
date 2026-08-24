@@ -45,14 +45,16 @@ export async function POST(req: NextRequest) {
       if (razorpayLinkId) {
         await prisma.payment.updateMany({
           where: { razorpayLinkId },
-          data: { status: 'paid', razorpayPaymentId: razorpayPaymentId || undefined },
+          // Must be 'completed' — every other part of the app checks status === 'completed'
+          data: { status: 'completed', razorpayPaymentId: razorpayPaymentId || undefined },
         })
       }
 
       if (dealId && type === 'deposit') {
         await prisma.deal.update({
           where: { id: dealId },
-          data: { status: 'in_progress' },
+          // 'deposit_paid' matches the status machine — seller then manually moves to 'in_progress'
+          data: { status: 'deposit_paid' },
         })
         await logAudit(
           dealId,
