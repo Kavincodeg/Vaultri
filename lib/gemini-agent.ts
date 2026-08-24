@@ -223,7 +223,7 @@ async function exec_schedule_reminder(args: {
 export async function exec_send_reminder(args: { reminderId: string }) {
   const reminder = await prisma.reminder.findUnique({
     where: { id: args.reminderId },
-    include: { deal: { include: { seller: true } } },
+    include: { deal: { include: { seller: true, payments: true } } },
   })
   if (!reminder) throw new Error('Reminder not found')
 
@@ -234,7 +234,7 @@ export async function exec_send_reminder(args: { reminderId: string }) {
   })
 
   try {
-    // Recompute remainder from real DB values — never trust stored message for amounts
+    // Recompute amounts from real DB values — never trust stored message for financial figures
     const deal = reminder.deal
     const fmtINR = (paise: number) => 'INR ' + (paise / 100).toLocaleString('en-IN')
     const depositAmt = Math.round((deal.price * deal.depositPercent) / 100)
@@ -242,11 +242,19 @@ export async function exec_send_reminder(args: { reminderId: string }) {
     const dueDateStr = new Date(deal.dueDate).toLocaleDateString('en-IN', {
       day: 'numeric', month: 'long', year: 'numeric',
     })
+
+    // Check real deposit payment status from DB — do NOT assume deposit is paid
+    const depositPayment = (deal as any).payments?.find((p: any) => p.type === 'deposit')
+    const depositPaid = depositPayment?.status === 'completed'
+    const depositLine = depositPaid
+      ? `Deposit paid: ${fmtINR(depositAmt)} (${deal.depositPercent}%)`
+      : `Deposit (pending — not yet received): ${fmtINR(depositAmt)} (${deal.depositPercent}%)`
+
     const emailBody =
-      `Hi, this is a payment reminder for your order "${deal.description}".\n\n` +
+      `Hi, this is a payment reminder for your order with ${deal.customerName}.\n\n` +
       `Due date: ${dueDateStr}\n` +
       `Total price: ${fmtINR(deal.price)}\n` +
-      `Deposit paid: ${fmtINR(depositAmt)} (${deal.depositPercent}%)\n` +
+      `${depositLine}\n` +
       `Remaining balance due: ${fmtINR(remainder)}\n\n` +
       `Please arrange payment before the due date. Thank you!`
 
@@ -258,7 +266,7 @@ export async function exec_send_reminder(args: { reminderId: string }) {
       to: (process.env.EMAIL_FROM ?? '').includes('resend.dev')
         ? 'delivered@resend.dev'
         : deal.seller.email,
-      subject: `Payment Reminder: ${fmtINR(remainder)} due on ${dueDateStr} — ${deal.customerName}`,
+      subject: `Payment Reminder: ${deal.customerName} — due ${dueDateStr}`,
       text: emailBody,
     })
     await prisma.reminder.update({
