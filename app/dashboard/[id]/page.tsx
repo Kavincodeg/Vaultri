@@ -191,12 +191,10 @@ export default async function DealDetailPage({ params }: { params: { id: string 
               {depositPayment.status !== 'completed' && depositPayment.shortUrl && (
                 <a
                   href={depositPayment.shortUrl}
-                  target='_blank'
-                  rel='noopener noreferrer'
                   className='btn btn-primary'
                   style={{ width:'100%', justifyContent:'center', marginBottom:'10px' }}
                 >
-                  💳 Pay Now ↗
+                  💳 Pay Now
                 </a>
               )}
               <p style={{ fontSize:'0.75rem', color:'var(--text-muted)' }}>Link ID: {depositPayment.razorpayLinkId}</p>
