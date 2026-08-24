@@ -37,7 +37,7 @@ export default async function DashboardPage() {
     include: {
       deals: {
         orderBy: { createdAt: 'desc' },
-        include: { payments: true },
+        include: { payments: true, reminders: true },
       },
     },
   })
@@ -69,11 +69,25 @@ export default async function DashboardPage() {
           {deals.map((deal) => {
             const { cls, label } = statusBadge(deal.status)
             const depositPayment = deal.payments.find((p) => p.type === 'deposit')
+            const sentReminder = deal.reminders.find((r) => r.status === 'sent')
+            const failedReminder = deal.reminders.find((r) => r.status === 'failed')
+            const scheduledReminder = deal.reminders.find((r) => r.status === 'scheduled')
             return (
               <div key={deal.id} className='deal-card'>
                 <div className='deal-card-header'>
                   <div className='deal-customer'>{deal.customerName}</div>
-                  <span className={'badge ' + cls}>{label}</span>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {sentReminder && (
+                      <span className='badge badge-paid' title='Reminder sent'>🔔 reminded</span>
+                    )}
+                    {failedReminder && !sentReminder && (
+                      <span className='badge badge-cancelled' title='Reminder failed'>🔔 failed</span>
+                    )}
+                    {scheduledReminder && !sentReminder && !failedReminder && (
+                      <span className='badge badge-pending' title='Reminder scheduled'>🔔 scheduled</span>
+                    )}
+                    <span className={'badge ' + cls}>{label}</span>
+                  </div>
                 </div>
                 <div className='deal-description'>{deal.description}</div>
                 <div className='deal-meta'>

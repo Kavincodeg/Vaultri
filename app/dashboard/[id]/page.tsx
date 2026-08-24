@@ -30,7 +30,12 @@ export default async function DealDetailPage({ params }: { params: { id: string 
 
   const depositPayment = deal.payments.find(p => p.type === 'deposit')
   const cancPayment = deal.payments.find(p => p.type === 'cancellation_fee')
-  const pendingReminders = deal.reminders.filter(r => !r.sentAt)
+  const pendingReminders = deal.reminders.filter(r => r.status === 'scheduled' && !r.sentAt)
+  const allReminders = deal.reminders.map(r => ({
+    id: r.id,
+    status: r.status,
+    sentAt: r.sentAt ? r.sentAt.toISOString() : null,
+  }))
 
   return (
     <div className='container' style={{ paddingBottom: '64px' }}>
@@ -131,6 +136,7 @@ export default async function DealDetailPage({ params }: { params: { id: string 
             customerName={deal.customerName}
             description={deal.description}
             pendingReminderIds={pendingReminders.map(r => r.id)}
+            reminders={allReminders}
           />
         </div>
       </div>
