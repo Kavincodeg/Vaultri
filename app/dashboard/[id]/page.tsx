@@ -111,6 +111,17 @@ export default async function DealDetailPage({ params }: { params: { id: string 
               <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', marginBottom:'12px' }}>
                 Amount: <strong style={{ color:'var(--text)' }}>{fmt(depositPayment.amount)}</strong>
               </p>
+              {depositPayment.status !== 'paid' && depositPayment.shortUrl && (
+                <a
+                  href={depositPayment.shortUrl}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='btn btn-primary'
+                  style={{ width:'100%', justifyContent:'center', marginBottom:'10px' }}
+                >
+                  💳 Pay Now ↗
+                </a>
+              )}
               <p style={{ fontSize:'0.75rem', color:'var(--text-muted)' }}>Link ID: {depositPayment.razorpayLinkId}</p>
             </div>
           )}
@@ -123,9 +134,20 @@ export default async function DealDetailPage({ params }: { params: { id: string 
                   {cancPayment.status === 'paid' ? '✅ Paid' : 'Pending'}
                 </span>
               </div>
-              <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)' }}>
+              <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', marginBottom:'12px' }}>
                 Fee Amount: <strong style={{ color:'var(--text)' }}>{fmt(cancPayment.amount)}</strong>
               </p>
+              {cancPayment.status !== 'paid' && cancPayment.shortUrl && (
+                <a
+                  href={cancPayment.shortUrl}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='btn btn-danger'
+                  style={{ width:'100%', justifyContent:'center' }}
+                >
+                  💳 Pay Cancellation Fee ↗
+                </a>
+              )}
             </div>
           )}
 

@@ -126,6 +126,7 @@ async function exec_create_deposit_link(args: {
       type: 'deposit',
       amount: args.amount,
       status: 'created',
+      shortUrl: link.short_url ?? null,
     },
   })
   await prisma.deal.update({ where: { id: args.dealId }, data: { status: 'deposit_pending' } })
@@ -163,6 +164,7 @@ async function exec_create_cancellation_fee_link(args: {
       type: 'cancellation_fee',
       amount: feeAmount,
       status: 'created',
+      shortUrl: link.short_url ?? null,
     },
   })
   await prisma.deal.update({ where: { id: args.dealId }, data: { status: 'cancelled' } })

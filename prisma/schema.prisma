@@ -43,6 +43,7 @@ model Payment {
   deal              Deal     @relation(fields: [dealId], references: [id])
   razorpayLinkId    String   @unique
   razorpayPaymentId String?  @unique
+  shortUrl          String?
   type              String
   amount            Int
   status            String
