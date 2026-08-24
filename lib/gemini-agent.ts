@@ -111,6 +111,7 @@ async function exec_create_deposit_link(args: {
   customerName: string
   description: string
 }) {
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
   const link = await (razorpay.paymentLink.create as any)({
     amount: args.amount,
     currency: 'INR',
@@ -118,6 +119,9 @@ async function exec_create_deposit_link(args: {
     customer: { name: args.customerName },
     notify: { email: false, sms: false },
     reminder_enable: false,
+    // Redirect customer back to the deal page after successful payment
+    callback_url: `${appUrl}/dashboard/${args.dealId}?paid=1`,
+    callback_method: 'get',
     notes: { dealId: args.dealId, type: 'deposit' },
   })
   const payment = await prisma.payment.create({

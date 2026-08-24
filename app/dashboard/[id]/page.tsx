@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { DealActions } from '@/components/DealActions'
+import { PaymentStatusPoller } from '@/components/PaymentStatusPoller'
 
 function fmt(paise: number) { return 'INR ' + (paise/100).toLocaleString('en-IN') }
 function statusLabel(s: string) {
@@ -238,6 +239,13 @@ export default async function DealDetailPage({ params }: { params: { id: string 
           />
         </div>
       </div>
+
+      {/* Auto-refresh while deposit is pending — no manual reload needed */}
+      <PaymentStatusPoller
+        dealId={deal.id}
+        initialDepositStatus={depositPayment?.status ?? null}
+        initialDealStatus={deal.status}
+      />
     </div>
   )
 }
