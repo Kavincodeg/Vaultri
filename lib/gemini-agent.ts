@@ -28,6 +28,7 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): 
   }
   throw new Error('Max retries exceeded')
 }
+const DISCLAIMER =
   '\n\n[DISCLAIMER]\nThese terms are a plain-language summary to support your agreement, not a substitute for legal advice.'
 
 const TOOLS = [
