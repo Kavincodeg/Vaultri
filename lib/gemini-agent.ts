@@ -216,7 +216,12 @@ export async function exec_send_reminder(args: { reminderId: string }) {
   try {
     await resend.emails.send({
       from: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
-      to: reminder.deal.seller.email,
+      // In sandbox mode (onboarding@resend.dev), Resend only accepts
+      // delivered@resend.dev as the recipient. Use the seller's real email
+      // once a verified custom domain is set as EMAIL_FROM.
+      to: (process.env.EMAIL_FROM ?? '').includes('resend.dev')
+        ? 'delivered@resend.dev'
+        : reminder.deal.seller.email,
       subject: 'Reminder: Payment due for ' + reminder.deal.customerName,
       text: reminder.message,
     })
