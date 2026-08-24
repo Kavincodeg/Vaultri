@@ -51,14 +51,15 @@ model Payment {
 }
 
 model Reminder {
-  id       String    @id @default(cuid())
-  dealId   String
-  deal     Deal      @relation(fields: [dealId], references: [id])
-  channel  String
-  message  String
-  status   String    @default("scheduled")
-  attempts Int       @default(0)
-  sentAt   DateTime?
+  id        String    @id @default(cuid())
+  dealId    String
+  deal      Deal      @relation(fields: [dealId], references: [id])
+  channel   String
+  message   String
+  status    String    @default("scheduled")
+  attempts  Int       @default(0)
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
 }
 
 model AuditLog {
