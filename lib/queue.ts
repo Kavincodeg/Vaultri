@@ -1,14 +1,16 @@
 /**
  * BullMQ job queue — reminder delivery with retry logic.
  *
- * bullmq and ioredis are imported lazily inside function bodies so webpack
- * does not try to bundle them (they are Node.js-only, not edge-compatible).
+ * For the demo / free-tier deployment, ENQUEUE_REMINDERS is not set,
+ * so enqueueReminder() is a no-op. Reminders are triggered manually
+ * from the deal detail page (DealActions → "Send Reminder Now").
+ *
+ * To enable automatic background delivery in production:
+ *   1. Set ENQUEUE_REMINDERS=true in your environment
+ *   2. Deploy worker.ts as a background process (Render, Railway, Fly.io)
+ *
+ * bullmq and ioredis are imported lazily so webpack does not bundle them.
  * next.config.js lists them in serverComponentsExternalPackages for safety.
- *
- * Requires REDIS_URL in .env.
- * For production, use Upstash Redis (set REDIS_URL to the Upstash Redis URL).
- *
- * Doc ref: Section 5 — BullMQ + Redis for background jobs.
  */
 
 const QUEUE_NAME = 'reminders'
@@ -16,10 +18,16 @@ const MAX_RETRIES = 3
 
 /**
  * Enqueue a reminder job.
+ * No-op unless ENQUEUE_REMINDERS=true and REDIS_URL are both set.
+ *
  * @param reminderId  DB Reminder.id
  * @param delayMs     Milliseconds until the job should fire (0 = immediate)
  */
 export async function enqueueReminder(reminderId: string, delayMs: number): Promise<void> {
+  // Demo / free-tier mode — skip automatic queueing entirely.
+  // Reminders are sent manually via the dashboard button.
+  if (process.env.ENQUEUE_REMINDERS !== 'true') return
+
   const url = process.env.REDIS_URL
   if (!url) {
     console.warn('[Queue] REDIS_URL not set — skipping enqueue for reminder', reminderId)
@@ -60,7 +68,8 @@ export async function enqueueReminder(reminderId: string, delayMs: number): Prom
 
 /**
  * Start the reminder worker.
- * Call this from the standalone worker process (worker.ts), not from API routes.
+ * Only used when running worker.ts as a standalone background process.
+ * Not needed for demo / free-tier deployments.
  */
 export async function startReminderWorker() {
   const url = process.env.REDIS_URL
