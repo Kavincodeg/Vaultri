@@ -2,6 +2,7 @@
 import "./globals.css"
 import { Nav } from "@/components/Nav"
 import { Providers } from "@/components/Providers"
+import { LayoutWrapper } from "@/components/LayoutWrapper"
 
 export const metadata: Metadata = {
   title: "Seller Protection Agent",
@@ -13,8 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <Providers>
-          <Nav />
-          <main>{children}</main>
+          <LayoutWrapper>
+            <Nav />
+            <main>{children}</main>
+          </LayoutWrapper>
         </Providers>
       </body>
     </html>

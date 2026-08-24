@@ -37,6 +37,38 @@ export default async function DealDetailPage({ params }: { params: { id: string 
     sentAt: r.sentAt ? r.sentAt.toISOString() : null,
   }))
 
+  // Calculate protection score (0-100)
+  let protectionScore = 0
+  const protectionItems = []
+  
+  if (deal.contractText) {
+    protectionScore += 25
+    protectionItems.push({ label: 'Contract Drafted', value: true })
+  } else {
+    protectionItems.push({ label: 'Contract Drafted', value: false })
+  }
+  
+  if (depositPayment?.status === 'completed') {
+    protectionScore += 25
+    protectionItems.push({ label: 'Deposit Secured', value: true })
+  } else {
+    protectionItems.push({ label: 'Deposit Secured', value: false })
+  }
+  
+  if (deal.contractText?.includes('IP') || deal.contractText?.includes('intellectual')) {
+    protectionScore += 25
+    protectionItems.push({ label: 'IP Protected', value: true })
+  } else {
+    protectionItems.push({ label: 'IP Protected', value: false })
+  }
+  
+  if (deal.reminders.length > 0) {
+    protectionScore += 25
+    protectionItems.push({ label: 'Payment Reminders', value: true })
+  } else {
+    protectionItems.push({ label: 'Payment Reminders', value: false })
+  }
+
   return (
     <div className='container' style={{ paddingBottom: '64px' }}>
       <div className='page-header' style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'16px' }}>
@@ -100,18 +132,62 @@ export default async function DealDetailPage({ params }: { params: { id: string 
         </div>
 
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Protection Score Card */}
+          <div className='card'>
+            <div className='card-header'>
+              <span className='card-title'>🛡️ Protection Score</span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'16px', paddingBottom:'12px' }}>
+              <div style={{
+                width: '120px',
+                height: '120px',
+                borderRadius: '50%',
+                background: `conic-gradient(var(--accent) ${protectionScore * 3.6}deg, var(--surface2) 0deg)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <div style={{
+                  width: '110px',
+                  height: '110px',
+                  borderRadius: '50%',
+                  background: 'var(--surface)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column',
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--accent)' }}>{protectionScore}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Score</div>
+                </div>
+              </div>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {protectionItems.map((item, idx) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem' }}>
+                    <span style={{ color: item.value ? 'var(--success)' : 'var(--text-muted)' }}>
+                      {item.value ? '✓' : '○'}
+                    </span>
+                    <span style={{ color: item.value ? 'var(--text)' : 'var(--text-muted)' }}>
+                      {item.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {depositPayment && (
             <div className='card'>
               <div className='card-header'>
                 <span className='card-title'>💳 Deposit Link</span>
-                <span className={'badge ' + (depositPayment.status === 'paid' ? 'badge-paid' : 'badge-created')}>
-                  {depositPayment.status === 'paid' ? '✅ Paid' : 'Awaiting payment'}
+                <span className={'badge ' + (depositPayment.status === 'completed' ? 'badge-paid' : 'badge-created')}>
+                  {depositPayment.status === 'completed' ? '✅ Paid' : 'Awaiting payment'}
                 </span>
               </div>
               <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', marginBottom:'12px' }}>
                 Amount: <strong style={{ color:'var(--text)' }}>{fmt(depositPayment.amount)}</strong>
               </p>
-              {depositPayment.status !== 'paid' && depositPayment.shortUrl && (
+              {depositPayment.status !== 'completed' && depositPayment.shortUrl && (
                 <a
                   href={depositPayment.shortUrl}
                   target='_blank'
@@ -130,14 +206,14 @@ export default async function DealDetailPage({ params }: { params: { id: string 
             <div className='card'>
               <div className='card-header'>
                 <span className='card-title'>⚠️ Cancellation Fee</span>
-                <span className={'badge ' + (cancPayment.status === 'paid' ? 'badge-paid' : 'badge-pending')}>
-                  {cancPayment.status === 'paid' ? '✅ Paid' : 'Pending'}
+                <span className={'badge ' + (cancPayment.status === 'completed' ? 'badge-paid' : 'badge-pending')}>
+                  {cancPayment.status === 'completed' ? '✅ Paid' : 'Pending'}
                 </span>
               </div>
               <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', marginBottom:'12px' }}>
                 Fee Amount: <strong style={{ color:'var(--text)' }}>{fmt(cancPayment.amount)}</strong>
               </p>
-              {cancPayment.status !== 'paid' && cancPayment.shortUrl && (
+              {cancPayment.status !== 'completed' && cancPayment.shortUrl && (
                 <a
                   href={cancPayment.shortUrl}
                   target='_blank'

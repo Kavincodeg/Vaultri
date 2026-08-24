@@ -1,22 +1,41 @@
 'use client'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 export function Nav() {
   const { data: session } = useSession()
+  const pathname = usePathname()
+
+  // Only show logo on non-dashboard pages
+  const showLogo = !pathname.startsWith('/dashboard')
+
   return (
     <nav className='nav'>
       <div className='nav-inner'>
-        <Link href='/' className='nav-brand' style={{ textDecoration: 'none' }}>
-          <div className='nav-brand-icon'>🛡️</div>
-          <span>Suraksha</span>
-        </Link>
+        {showLogo && (
+          <Link href='/' className='nav-brand' style={{ textDecoration: 'none' }}>
+            <div className='nav-brand-icon'>🛡️</div>
+            <span>VAULTRI</span>
+          </Link>
+        )}
+        {!showLogo && session && (
+          <div className='nav-brand' style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Good morning, <strong>{session.user?.name}</strong>
+          </div>
+        )}
         <div className='nav-actions'>
           {session ? (
             <>
-              <Link href='/dashboard' className='btn btn-ghost btn-sm'>Dashboard</Link>
-              <Link href='/dashboard/new' className='btn btn-primary btn-sm'>+ New Deal</Link>
-              <button id='btn-signout' className='btn btn-secondary btn-sm' onClick={() => signOut()}>Sign out</button>
+              {pathname.startsWith('/dashboard') && (
+                <Link href='/dashboard/new' className='btn btn-primary btn-sm'>+ New Deal</Link>
+              )}
+              {!pathname.startsWith('/dashboard') && (
+                <Link href='/dashboard' className='btn btn-ghost btn-sm'>Dashboard</Link>
+              )}
+              {!pathname.startsWith('/dashboard') && (
+                <Link href='/auth/signin' className='btn btn-secondary btn-sm'>Sign in</Link>
+              )}
             </>
           ) : (
             <>
