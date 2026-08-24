@@ -234,6 +234,22 @@ export async function exec_send_reminder(args: { reminderId: string }) {
   })
 
   try {
+    // Recompute remainder from real DB values — never trust stored message for amounts
+    const deal = reminder.deal
+    const fmtINR = (paise: number) => 'INR ' + (paise / 100).toLocaleString('en-IN')
+    const depositAmt = Math.round((deal.price * deal.depositPercent) / 100)
+    const remainder = deal.price - depositAmt
+    const dueDateStr = new Date(deal.dueDate).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    })
+    const emailBody =
+      `Hi, this is a payment reminder for your order "${deal.description}".\n\n` +
+      `Due date: ${dueDateStr}\n` +
+      `Total price: ${fmtINR(deal.price)}\n` +
+      `Deposit paid: ${fmtINR(depositAmt)} (${deal.depositPercent}%)\n` +
+      `Remaining balance due: ${fmtINR(remainder)}\n\n` +
+      `Please arrange payment before the due date. Thank you!`
+
     await resend.emails.send({
       from: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
       // In sandbox mode (onboarding@resend.dev), Resend only accepts
@@ -241,9 +257,9 @@ export async function exec_send_reminder(args: { reminderId: string }) {
       // once a verified custom domain is set as EMAIL_FROM.
       to: (process.env.EMAIL_FROM ?? '').includes('resend.dev')
         ? 'delivered@resend.dev'
-        : reminder.deal.seller.email,
-      subject: 'Reminder: Payment due for ' + reminder.deal.customerName,
-      text: reminder.message,
+        : deal.seller.email,
+      subject: `Payment Reminder: ${fmtINR(remainder)} due on ${dueDateStr} — ${deal.customerName}`,
+      text: emailBody,
     })
     await prisma.reminder.update({
       where: { id: args.reminderId },
@@ -368,15 +384,26 @@ export async function runNewDealAgent(input: {
 
   const remCall = calls.find((c: any) => c.name === 'schedule_reminder')
   if (remCall) {
-    const a = remCall.args as any
     const due = new Date(input.dueDate)
     const when = new Date(due)
     when.setDate(when.getDate() - 2)
+
+    // Compute the actual remainder from real numbers — do NOT trust the AI's message
+    const depositPct = (results['draft_contract'] as any)?.depositPercent ?? 30
+    const depositAmt = Math.round((input.price * depositPct) / 100)
+    const remainder = input.price - depositAmt
+    const fmtINR = (paise: number) => 'INR ' + (paise / 100).toLocaleString('en-IN')
+
+    const message =
+      `Hi, this is a reminder that your payment for "${input.description}" is due on ` +
+      due.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) +
+      `.\n\nRemaining balance: ${fmtINR(remainder)} (total ${fmtINR(input.price)} less deposit of ${fmtINR(depositAmt)}).\n\nPlease arrange payment before the due date. Thank you!`
+
     results['schedule_reminder'] = await exec_schedule_reminder({
       dealId: input.dealId,
       when: when.toISOString(),
       channel: 'email',
-      message: a.message ?? 'Reminder: order due ' + due.toDateString(),
+      message,
     })
   }
 
