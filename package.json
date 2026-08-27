@@ -2,14 +2,12 @@
   "name": "seller-protection",
   "version": "0.1.0",
   "private": true,
-  "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "prisma:seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "worker": "ts-node --compiler-options {\"module\":\"CommonJS\"} worker.ts"
   },
   "dependencies": {
