@@ -1,4 +1,6 @@
-# Vaultri (Suraksha) — Seller Protection Platform
+# Vaultri — Every deal, protected.
+
+![Vaultri demo — create a deal, see AI-drafted terms, collect deposit](./docs/demo.gif)
 
 A business-protection tool for independent and artisan sellers (jewellers, tailors, bakers, freelance designers). Sellers describe a deal in plain language; the product generates contract terms, collects an upfront deposit via Razorpay, tracks payment status, and follows up with reminders.
 

@@ -1,12 +1,24 @@
-﻿import type { Metadata } from "next"
+import type { Metadata } from "next"
 import "./globals.css"
 import { Nav } from "@/components/Nav"
 import { Providers } from "@/components/Providers"
 import { LayoutWrapper } from "@/components/LayoutWrapper"
 
 export const metadata: Metadata = {
-  title: "Seller Protection Agent",
-  description: "AI-powered contract, deposit, and reminder system for independent sellers. Built for Razorpay AI Buildathon.",
+  title: 'Vaultri — Every deal, protected.',
+  description: 'AI-powered contract, deposit, and reminder system for independent sellers.',
+  openGraph: {
+    title: 'Vaultri — Every deal, protected.',
+    description: 'AI-powered contract, deposit, and reminder system for independent sellers.',
+    siteName: 'Vaultri',
+    locale: 'en_IN',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Vaultri — Every deal, protected.',
+    description: 'AI-powered contract, deposit, and reminder system for independent sellers.',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
