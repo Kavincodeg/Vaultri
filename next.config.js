@@ -1,4 +1,4 @@
-﻿// @ts-check
+// @ts-check
 const { withSentryConfig } = require('@sentry/nextjs')
 
 /** @type {import("next").NextConfig} */
@@ -10,10 +10,9 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   experimental: {
-    // Tell webpack not to bundle these Node.js-only packages —
-    // they are available at runtime in the Node.js server environment.
+    // Tell webpack not to bundle Node.js-only packages.
     // Key for Next.js 14 (renamed to serverExternalPackages in Next.js 15+)
-    serverComponentsExternalPackages: ['bullmq', 'ioredis'],
+    serverComponentsExternalPackages: [],
   },
 }
 

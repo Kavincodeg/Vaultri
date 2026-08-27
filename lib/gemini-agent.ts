@@ -200,26 +200,13 @@ async function exec_schedule_reminder(args: {
     data: { dealId: args.dealId, channel: args.channel, message: args.message, status: 'scheduled' },
   })
 
-  // Enqueue BullMQ job — fires at the scheduled time with retry logic
-  // Dynamic import keeps bullmq/ioredis out of the webpack bundle
-  const delay = Math.max(0, new Date(args.when).getTime() - Date.now())
-  try {
-    await enqueueReminder(reminder.id, delay)
-  } catch {
-    // Queue unavailable (no Redis) — reminder is still in DB, can be sent manually
-    console.warn('[Agent] Could not enqueue reminder — Redis unavailable')
-  }
+  // No BullMQ enqueue needed — QStash cron (POST /api/cron/check-reminders)
+  // polls every 12 h and fires any reminder whose deal.dueDate is within 3 days.
 
   await logAudit(
     args.dealId,
     'reminder_scheduled',
-    'Scheduled ' +
-      args.channel +
-      ' reminder for ' +
-      args.when +
-      ' (queued with ' +
-      Math.round(delay / 1000 / 60) +
-      'min delay)',
+    'Scheduled ' + args.channel + ' reminder (QStash cron will deliver when deal due date is within 3 days)',
   )
   return { reminderId: reminder.id }
 }
@@ -297,7 +284,7 @@ export async function exec_send_reminder(args: { reminderId: string }) {
       tags: { context: 'reminder_send' },
       extra: { reminderId: args.reminderId, dealId: reminder.dealId },
     })
-    throw err // re-throw so BullMQ retries
+    throw err // re-throw so QStash retries the request
   }
 
   return { sent: true, reminderId: args.reminderId }

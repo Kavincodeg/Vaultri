@@ -18,6 +18,7 @@
     "@sentry/nextjs": "^10.70.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/nodemailer": "^8.0.1",
+    "@upstash/qstash": "^2.11.3",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.2",
     "bcryptjs": "^3.0.3",

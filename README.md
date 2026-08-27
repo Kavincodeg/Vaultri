@@ -17,7 +17,7 @@ A business-protection tool for independent and artisan sellers (jewellers, tailo
 | Auth | NextAuth v4 — credentials (email + bcrypt) |
 | AI Agent | Gemini 2.0 Flash — function calling, server-side only |
 | Payments | Razorpay Payment Links API + signed webhooks |
-| Background Jobs | BullMQ + Upstash Redis (optional — see below) |
+| Background Jobs | Upstash QStash — signed scheduled HTTP calls, no persistent worker |
 | Email | Resend |
 | Rate Limiting | @upstash/ratelimit (edge middleware) |
 | Error Monitoring | Sentry |
@@ -55,35 +55,38 @@ npx prisma db seed
 npm run dev
 ```
 
-Reminders are triggered **manually** from the deal detail page — no background worker needed for the demo.
+Reminders are triggered **automatically** by Upstash QStash on a schedule — no background worker needed.
 
-> **For production automatic reminders:** set `ENQUEUE_REMINDERS=true` and run `npm run worker` as a persistent background process (Render, Railway, or Fly.io).
+> **To enable automatic reminders in production:** add `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY` to Vercel env vars, then create a QStash schedule in the [Upstash console](https://console.upstash.com) pointing to `https://vaultri.vercel.app/api/cron/check-reminders` on a `0 */12 * * *` cron (every 12 hours).
 
 ---
 
-## Reminder Flow (Demo Mode)
+## Reminder Flow (QStash Cron)
 
-1. Create a deal → AI drafts contract + Razorpay deposit link + schedules a reminder record in DB
-2. On the deal detail page → **Reminder Status** card shows `scheduled`
-3. Click **"Send Reminder Now"** → email fires via Resend → status updates to `sent`
+1. Create a deal → AI drafts contract + Razorpay deposit link + saves Reminder to DB with `status = scheduled`
+2. Every 12 hours, Upstash QStash calls `POST /api/cron/check-reminders` (signed request)
+3. The route finds all `scheduled` reminders where `deal.dueDate` is within 3 days
+4. Calls `exec_send_reminder` for each → email fires via Resend → status updates to `sent`
+5. "Send Reminder Now" button on the deal page still works for manual one-off sends
 
-No worker process, no Render, fully free.
+No worker process, no Render, fully serverless.
 
 ---
 
 ## Architecture
 
 ```
-Seller (Web App)              BullMQ / Redis Worker (production only)
-      │                               │
-      └──────────────┬────────────────┘
-                     ▼
-       Next.js API + Gemini Agent
-       (tool-calling, server-side only)
-                     │
-      ┌──────────────┼──────────────┐
-      ▼              ▼              ▼
- Postgres DB    Razorpay API    Resend Email
+Seller (Web App)
+      │
+      ▼
+ Next.js API + Gemini Agent
+ (tool-calling, server-side only)
+      │
+      ├─────────────────────────────────────┐
+      ▼              ▼              ▼        ▼
+ Postgres DB    Razorpay API    Resend    Upstash QStash
+                                         (cron → /api/cron/
+                                          check-reminders)
 ```
 
 ### Agent tools (fixed allowlist)
