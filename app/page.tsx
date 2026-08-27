@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   ArrowRight,
   Sparkles,
-  Bell,
   CreditCard,
 } from 'lucide-react'
 
@@ -161,17 +160,12 @@ export default function HomePage() {
           The problem that inspired Vaultri
         </div>
         <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', lineHeight: 1.7 }}>
-          &ldquo;Every sale is an act of faith. You spend days making something custom — only for a
-          customer to cancel, copy your design, or pay 60 days late. Independent sellers need the
-          same protection that big businesses take for granted.&rdquo;
+          &ldquo;I design and sell jewellery. My pieces take 3 days to make. I&apos;ve had customers cancel after the piece is finished, copy my designs and get them made cheaper elsewhere, and pay me 60 days late. I have no contract, no deposit system, no protection. Every sale is an act of faith &mdash; and sometimes faith is expensive.&rdquo;
         </p>
       </div>
 
       {/* ── Bottom CTA ────────────────────────────────────── */}
       <div style={{ marginTop: '48px', textAlign: 'center' }}>
-        <div style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '0.9375rem' }}>
-          Built to solve a real problem independent sellers face
-        </div>
         <Link href='/auth/signup' className='btn btn-primary' style={{ fontSize: '1rem', padding: '14px 32px', gap: '10px' }}>
           Start Protecting Deals Free <ArrowRight size={16} />
         </Link>

@@ -3,6 +3,8 @@ import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import { ShieldCheck } from 'lucide-react'
+
 export function Nav() {
   const { data: session } = useSession()
   const pathname = usePathname()
@@ -15,7 +17,9 @@ export function Nav() {
       <div className='nav-inner'>
         {showLogo && (
           <Link href='/' className='nav-brand' style={{ textDecoration: 'none' }}>
-            <div className='nav-brand-icon'>🛡️</div>
+            <div className='nav-brand-icon'>
+              <ShieldCheck size={18} color="#fff" strokeWidth={2.5} />
+            </div>
             <span>VAULTRI</span>
           </Link>
         )}
