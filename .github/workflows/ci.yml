@@ -51,21 +51,26 @@ jobs:
           QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
           QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
 
-  deploy:
+      deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
     needs: build
-    # Only deploy on pushes to main, not on PRs
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: --prod
+          node-version: 24
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to Vercel
+        run: vercel --prod --token="${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
