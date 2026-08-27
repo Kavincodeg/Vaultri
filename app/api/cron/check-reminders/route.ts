@@ -14,7 +14,7 @@
  *   QSTASH_CURRENT_SIGNING_KEY
  *   QSTASH_NEXT_SIGNING_KEY
  */
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { verifySignatureAppRouter } from '@upstash/qstash/nextjs'
 import { prisma } from '@/lib/prisma'
 import { exec_send_reminder } from '@/lib/gemini-agent'
@@ -23,7 +23,7 @@ import * as Sentry from '@sentry/nextjs'
 // Window: send reminders for deals due within the next N days
 const DUE_WINDOW_DAYS = 3
 
-async function handler(_req: NextRequest) {
+async function handler() {
   const now = new Date()
   const windowEnd = new Date(now)
   windowEnd.setDate(windowEnd.getDate() + DUE_WINDOW_DAYS)

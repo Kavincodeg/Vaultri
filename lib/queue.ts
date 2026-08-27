@@ -12,8 +12,7 @@
  * No-op. Reminder is saved to DB by exec_schedule_reminder;
  * QStash picks it up on the next scheduled run.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function enqueueReminder(_reminderId: string, _delayMs: number): Promise<void> {
+export async function enqueueReminder(): Promise<void> {
   // Intentional no-op — QStash cron handles delivery
 }
 

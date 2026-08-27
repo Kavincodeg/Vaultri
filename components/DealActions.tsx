@@ -89,7 +89,6 @@ export function DealActions({
   const canCancel = !isCancelled && !isCompleted && status !== 'draft'
 
   // Reminder status display helpers
-  const sentReminders = reminders.filter((r) => r.status === 'sent')
   const failedReminders = reminders.filter((r) => r.status === 'failed')
 
   return (

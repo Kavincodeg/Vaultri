@@ -1,11 +1,10 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useSession, signOut } from 'next-auth/react'
+import { signOut } from 'next-auth/react'
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { data: session } = useSession()
 
   const isActive = (href: string) => {
     if (href === '/dashboard' && pathname === '/dashboard') return true

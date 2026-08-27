@@ -11,7 +11,7 @@ const EXAMPLES = [
 ]
 
 export default function NewDealPage() {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
   const [description, setDescription] = useState('')
   const [customerName, setCustomerName] = useState('')

@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma'
 import { razorpay } from '@/lib/razorpay'
 import { Resend } from 'resend'
 import { logAudit } from '@/lib/audit'
-import { enqueueReminder } from '@/lib/queue'
 
 const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 const resend = new Resend(process.env.RESEND_API_KEY!)
