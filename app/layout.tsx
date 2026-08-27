@@ -5,6 +5,7 @@ import { Providers } from "@/components/Providers"
 import { LayoutWrapper } from "@/components/LayoutWrapper"
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vaultri.vercel.app'),
   title: 'Vaultri — Every deal, protected.',
   description: 'AI-powered contract, deposit, and reminder system for independent sellers.',
   openGraph: {
