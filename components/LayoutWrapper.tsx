@@ -13,7 +13,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <div id='root-layout'>
       {showSidebar && <Sidebar />}
-      <div className='main-content'>{children}</div>
+      <div className={`main-content${showSidebar ? ' has-sidebar' : ''}`}>{children}</div>
     </div>
   )
 }

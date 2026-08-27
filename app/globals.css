@@ -1,4 +1,4 @@
-﻿@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -21,17 +21,25 @@
   --sidebar-width: 240px;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   font-family: "Inter", system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
+  height: 100%;
   min-height: 100vh;
   line-height: 1.6;
   display: flex;
+  flex-direction: column;
 }
 
 #root-layout {
   display: flex;
+  flex-direction: column;
+  flex: 1;
   width: 100%;
   min-height: 100vh;
 }
@@ -162,22 +170,34 @@ a:hover { text-decoration: underline; }
 }
 
 .main-content {
-  margin-left: var(--sidebar-width);
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Only push content right when sidebar is visible */
+.main-content.has-sidebar {
+  margin-left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
 }
 
 main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
   .sidebar {
     display: none;
   }
-  .main-content {
+  .main-content,
+  .main-content.has-sidebar {
     margin-left: 0;
+    width: 100%;
   }
 }
 
@@ -323,9 +343,11 @@ main {
 
 /* ── Hero (landing) ────────────────────────────────────── */
 .hero {
+  flex: 1;
   min-height: calc(100vh - 64px);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; padding: 48px 24px;
+  width: 100%;
 }
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
