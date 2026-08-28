@@ -249,7 +249,7 @@ Right now the entire product is seller-facing — a customer only ever sees a Ra
 
 <div align="center">
 
-Built by [Your Name](https://github.com/Kavincodeg) · [LinkedIn](#)
+Built by [Kavin v s](https://github.com/Kavincodeg) · [LinkedIn](https://www.linkedin.com/in/kavin-v-s-605940292/)
 
 ⭐ If this project was useful or interesting, consider giving it a star.
 
