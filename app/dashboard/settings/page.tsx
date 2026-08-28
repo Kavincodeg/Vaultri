@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { ThemeSelector } from '@/components/ThemeSelector'
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
@@ -25,6 +26,20 @@ export default async function SettingsPage() {
 
       {/* Settings Sections */}
       <div style={{ maxWidth: '600px' }}>
+        {/* Appearance Section */}
+        <div className='card' style={{ marginBottom: '24px' }}>
+          <div className='card-header'>
+            <div className='card-title'>🎨 Appearance & Theme</div>
+          </div>
+          <div className='form-group' style={{ gap: '10px' }}>
+            <div className='form-label'>Theme Mode</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+              Choose your preferred interface theme. Vaultri automatically adjusts all colors and styles.
+            </div>
+            <ThemeSelector />
+          </div>
+        </div>
+
         {/* Profile Section */}
         <div className='card' style={{ marginBottom: '24px' }}>
           <div className='card-header'>

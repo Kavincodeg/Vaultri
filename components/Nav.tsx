@@ -2,8 +2,8 @@
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-
 import { ShieldCheck } from 'lucide-react'
+import { ThemeToggle } from './ThemeProvider'
 
 export function Nav() {
   const { data: session } = useSession()
@@ -29,6 +29,7 @@ export function Nav() {
           </div>
         )}
         <div className='nav-actions'>
+          <ThemeToggle />
           {session ? (
             <>
               {pathname.startsWith('/dashboard') && (
