@@ -127,7 +127,14 @@ export default async function DealsPage() {
                     <td>
                       <div className='deals-table-cell-customer'>
                         <div className='deal-avatar'>{getAvatarLetter(deal.customerName)}</div>
-                        <div className='name'>{deal.customerName}</div>
+                        <div>
+                          <div className='name'>{deal.customerName}</div>
+                          {deal.customerEmail && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              {deal.customerEmail}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>

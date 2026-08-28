@@ -41,6 +41,8 @@ export default async function RemindersPage() {
       ...r,
       dealId: deal.id,
       customerName: deal.customerName,
+      customerEmail: deal.customerEmail,
+      sellerEmail: seller.email,
     }))
   )
 
@@ -120,7 +122,12 @@ export default async function RemindersPage() {
 
                 return (
                   <tr key={reminder.id}>
-                    <td>{reminder.customerName || 'N/A'}</td>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{reminder.customerName || 'N/A'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {reminder.customerEmail || reminder.sellerEmail}
+                      </div>
+                    </td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                       {reminder.message.substring(0, 50)}...
                     </td>
