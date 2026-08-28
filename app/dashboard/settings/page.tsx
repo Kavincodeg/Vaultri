@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { ThemeSelector } from '@/components/ThemeSelector'
+import { ApiConfigSection } from '@/components/ApiConfigSection'
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
@@ -115,19 +116,7 @@ export default async function SettingsPage() {
         </div>
 
         {/* API Section */}
-        <div className='card' style={{ marginBottom: '24px' }}>
-          <div className='card-header'>
-            <div className='card-title'>🔑 API Configuration</div>
-          </div>
-          <div className='form-group' style={{ gap: '12px' }}>
-            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-              Configure your Razorpay and email settings
-            </div>
-            <button className='btn btn-secondary' style={{ width: '100%' }}>
-              Configure API Keys
-            </button>
-          </div>
-        </div>
+        <ApiConfigSection />
 
         {/* Danger Zone */}
         <div className='card' style={{ marginBottom: '24px', borderColor: 'var(--danger)' }}>
