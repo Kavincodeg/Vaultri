@@ -92,11 +92,11 @@ export default async function DealDetailPage({ params }: { params: { id: string 
                 { label:'Total Price', value: fmt(deal.price) },
                 { label:'Deposit (' + deal.depositPercent + '%)', value: fmt(Math.round(deal.price * deal.depositPercent / 100)) },
                 { label:'Due Date', value: new Date(deal.dueDate).toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' }) },
-                { label:'Created', value: new Date(deal.createdAt).toLocaleDateString('en-IN') },
+                { label:'Reminder Email', value: deal.customerEmail || seller.email },
               ].map(item => (
                 <div key={item.label}>
                   <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'4px' }}>{item.label}</div>
-                  <div style={{ fontWeight:600 }}>{item.value}</div>
+                  <div style={{ fontWeight:600, wordBreak:'break-all' }}>{item.value}</div>
                 </div>
               ))}
             </div>

@@ -15,6 +15,7 @@ export default function NewDealPage() {
   const router = useRouter()
   const [description, setDescription] = useState('')
   const [customerName, setCustomerName] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [price, setPrice] = useState('')
   const [dueDate, setDueDate] = useState('')
@@ -43,6 +44,7 @@ export default function NewDealPage() {
         body: JSON.stringify({
           description: description.trim(),
           customerName: customerName.trim(),
+          customerEmail: customerEmail.trim() || null,
           customerPhone: customerPhone.trim() || null,
           price: Math.round(priceNum * 100),
           dueDate: new Date(dueDate).toISOString(),
@@ -89,19 +91,23 @@ export default function NewDealPage() {
                 <input id='customer-name' type='text' className='form-input' placeholder='e.g. Priya Sharma' value={customerName} onChange={e => setCustomerName(e.target.value)} required />
               </div>
               <div className='form-group'>
-                <label className='form-label' htmlFor='customer-phone'>Customer phone (optional)</label>
-                <input id='customer-phone' type='tel' className='form-input' placeholder='+91 99999 00000' value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+                <label className='form-label' htmlFor='customer-email'>Customer email (for reminders)</label>
+                <input id='customer-email' type='email' className='form-input' placeholder='e.g. priya@example.com' value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
               </div>
             </div>
             <div className='form-grid'>
               <div className='form-group'>
+                <label className='form-label' htmlFor='customer-phone'>Customer phone (optional)</label>
+                <input id='customer-phone' type='tel' className='form-input' placeholder='+91 99999 00000' value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+              </div>
+              <div className='form-group'>
                 <label className='form-label' htmlFor='deal-price'>Total price (INR) <span style={{ color: 'var(--accent-h)' }}>*</span></label>
                 <input id='deal-price' type='number' className='form-input' placeholder='e.g. 8000' value={price} onChange={e => setPrice(e.target.value)} min='1' step='1' required />
               </div>
-              <div className='form-group'>
-                <label className='form-label' htmlFor='deal-due-date'>Due / delivery date <span style={{ color: 'var(--accent-h)' }}>*</span></label>
-                <input id='deal-due-date' type='date' className='form-input' value={dueDate} onChange={e => setDueDate(e.target.value)} min={minDate} required />
-              </div>
+            </div>
+            <div className='form-group'>
+              <label className='form-label' htmlFor='deal-due-date'>Due / delivery date <span style={{ color: 'var(--accent-h)' }}>*</span></label>
+              <input id='deal-due-date' type='date' className='form-input' value={dueDate} onChange={e => setDueDate(e.target.value)} min={minDate} required />
             </div>
             {error && <div className='alert alert-error' id='form-error'>{error}</div>}
             <button id='btn-create-deal-submit' type='submit' className='btn btn-primary'

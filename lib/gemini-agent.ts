@@ -246,19 +246,27 @@ export async function exec_send_reminder(args: { reminderId: string }) {
       ? `Deposit paid: ${fmtINR(depositAmt)} (${deal.depositPercent}%)`
       : `Deposit (pending — not yet received): ${fmtINR(depositAmt)} (${deal.depositPercent}%)`
 
+    // Send to customer's email if provided; fallback to signed-in seller's email
+    const recipientEmail = deal.customerEmail?.trim() || deal.seller.email
+    if (!recipientEmail) throw new Error('Recipient email is required to send reminder')
+
+    const payLinkLine = (depositPayment?.shortUrl && !depositPaid)
+      ? `\nDeposit Payment Link: ${depositPayment.shortUrl}\n`
+      : ''
+
     const emailBody =
-      `Hi, this is a payment reminder for your order with ${deal.customerName}.\n\n` +
+      `Hi ${deal.customerName},\n\n` +
+      `This is a payment reminder for your order: "${deal.description}".\n\n` +
       `Due date: ${dueDateStr}\n` +
       `Total price: ${fmtINR(deal.price)}\n` +
       `${depositLine}\n` +
-      `Remaining balance due: ${fmtINR(remainder)}\n\n` +
-      `Please arrange payment before the due date. Thank you!`
-
-    if (!deal.customerEmail) throw new Error('Customer email is required to send reminder')
+      `Remaining balance due: ${fmtINR(remainder)}\n` +
+      payLinkLine +
+      `\nPlease arrange payment before the due date. Thank you!`
 
     await transporter.sendMail({
       from: process.env.GMAIL_USER,
-      to: deal.customerEmail,
+      to: recipientEmail,
       subject: `Payment Reminder: ${deal.customerName} — due ${dueDateStr}`,
       text: emailBody,
     })
@@ -269,7 +277,7 @@ export async function exec_send_reminder(args: { reminderId: string }) {
     await logAudit(
       reminder.dealId,
       'reminder_sent',
-      'Sent reminder to customer email: ' + reminder.deal.customerEmail,
+      'Sent reminder to email: ' + recipientEmail,
     )
   } catch (err: any) {
     await prisma.reminder.update({
