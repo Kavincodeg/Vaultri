@@ -28,14 +28,14 @@ async function handler() {
   const windowEnd = new Date(now)
   windowEnd.setDate(windowEnd.getDate() + DUE_WINDOW_DAYS)
 
-  // Find all scheduled reminders whose deal dueDate falls within the window
+  // Find all scheduled reminders whose deal dueDate falls within the window and is not completed/cancelled
   const due = await prisma.reminder.findMany({
     where: {
       status: 'scheduled',
       deal: {
+        status: { notIn: ['completed', 'cancelled'] },
         dueDate: {
-          gte: now,        // not already past due
-          lte: windowEnd,  // within 3-day window
+          lte: windowEnd,  // due now or within the 3-day window
         },
       },
     },
