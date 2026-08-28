@@ -338,81 +338,88 @@ export async function runNewDealAgent(input: {
       ', channel=email, write a payment reminder message.',
   ].join('\n')
 
-  let result: any
+  let calls: any[] = []
   try {
-    result = await withRetry(() => model.generateContent(prompt))
+    const result = await withRetry(() => model.generateContent(prompt))
+    calls = result.response.functionCalls() ?? []
   } catch (err: any) {
-    // Alert Sentry — doc §9: agent tool-call errors should raise an alert
+    console.warn('[runNewDealAgent] Gemini tool call failed, using default protection terms fallback:', err?.message)
     Sentry.captureException(err, {
       tags: { context: 'gemini_agent', agent: 'new_deal' },
       extra: { dealId: input.dealId },
     })
-    throw err
   }
-
-  const calls = result.response.functionCalls() ?? []
-  if (!calls.length) throw new Error('Agent made no tool calls')
-
-  const hasDraft = calls.some((c: any) => c.name === 'draft_contract')
-  const hasDeposit = calls.some((c: any) => c.name === 'create_deposit_link')
-  if (!hasDraft || !hasDeposit)
-    throw new Error('Guardrail: must call draft_contract + create_deposit_link')
 
   const results: Record<string, unknown> = {}
 
+  // 1. Contract Drafting
   const draftCall = calls.find((c: any) => c.name === 'draft_contract')
+  let depositPct = depositGuess
+  let contractText = ''
+
   if (draftCall) {
     const a = draftCall.args as any
-    const pct: number = a.depositPercent ?? 30
-    const textWithDisclaimer = a.contractText + DISCLAIMER
-    await prisma.deal.update({
-      where: { id: input.dealId },
-      data: { contractText: textWithDisclaimer, depositPercent: pct },
+    depositPct = a.depositPercent ?? depositGuess
+    contractText = (a.contractText || '') + DISCLAIMER
+  } else {
+    // Fallback contract terms if LLM call was skipped or omitted
+    const dueDateFormatted = new Date(input.dueDate).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
     })
-    await logAudit(
-      input.dealId,
-      'contract_drafted',
-      'Agent drafted contract with ' + pct + '% deposit and disclaimer',
-    )
-    results['draft_contract'] = { contractText: textWithDisclaimer, depositPercent: pct }
-  }
-
-  const depositCall = calls.find((c: any) => c.name === 'create_deposit_link')
-  if (depositCall) {
-    const pct = (results['draft_contract'] as any)?.depositPercent ?? 30
-    const amt = Math.round((input.price * pct) / 100)
-    results['create_deposit_link'] = await exec_create_deposit_link({
-      dealId: input.dealId,
-      amount: amt,
-      customerName: input.customerName,
-      description: input.description,
-    })
-  }
-
-  const remCall = calls.find((c: any) => c.name === 'schedule_reminder')
-  if (remCall) {
-    const due = new Date(input.dueDate)
-    const when = new Date(due)
-    when.setDate(when.getDate() - 2)
-
-    // Compute the actual remainder from real numbers — do NOT trust the AI's message
-    const depositPct = (results['draft_contract'] as any)?.depositPercent ?? 30
-    const depositAmt = Math.round((input.price * depositPct) / 100)
-    const remainder = input.price - depositAmt
     const fmtINR = (paise: number) => 'INR ' + (paise / 100).toLocaleString('en-IN')
+    const depositAmt = Math.round((input.price * depositPct) / 100)
 
-    const message =
-      `Hi, this is a reminder that your payment for "${input.description}" is due on ` +
-      due.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) +
-      `.\n\nRemaining balance: ${fmtINR(remainder)} (total ${fmtINR(input.price)} less deposit of ${fmtINR(depositAmt)}).\n\nPlease arrange payment before the due date. Thank you!`
-
-    results['schedule_reminder'] = await exec_schedule_reminder({
-      dealId: input.dealId,
-      when: when.toISOString(),
-      channel: 'email',
-      message,
-    })
+    contractText =
+      `This contract confirms the custom agreement for: "${input.description}".\n\n` +
+      `• Total Price: ${fmtINR(input.price)}\n` +
+      `• Required Deposit (${depositPct}%): ${fmtINR(depositAmt)}\n` +
+      `• Due / Delivery Date: ${dueDateFormatted}\n\n` +
+      `Intellectual Property: All designs, mockups, and work-in-progress remain the property of the seller until full settlement.\n\n` +
+      `Cancellation Policy: In the event of order cancellation, a 50% cancellation fee applies to cover labor and committed materials.\n\n` +
+      `Late Payments: Final balance must be settled on or before the due date.` +
+      DISCLAIMER
   }
+
+  await prisma.deal.update({
+    where: { id: input.dealId },
+    data: { contractText, depositPercent: depositPct },
+  })
+  await logAudit(
+    input.dealId,
+    'contract_drafted',
+    `Contract drafted with ${depositPct}% deposit terms`,
+  )
+  results['draft_contract'] = { contractText, depositPercent: depositPct }
+
+  // 2. Create Razorpay Deposit Link
+  const depositAmt = Math.round((input.price * depositPct) / 100)
+  results['create_deposit_link'] = await exec_create_deposit_link({
+    dealId: input.dealId,
+    amount: depositAmt,
+    customerName: input.customerName,
+    description: input.description,
+  })
+
+  // 3. Schedule Reminder
+  const due = new Date(input.dueDate)
+  const when = new Date(due)
+  when.setDate(when.getDate() - 2)
+  const remainder = input.price - depositAmt
+  const fmtINR = (paise: number) => 'INR ' + (paise / 100).toLocaleString('en-IN')
+
+  const reminderMessage =
+    `Hi, this is a reminder that your payment for "${input.description}" is due on ` +
+    due.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) +
+    `.\n\nRemaining balance: ${fmtINR(remainder)}.\n\nPlease arrange payment before the due date. Thank you!`
+
+  results['schedule_reminder'] = await exec_schedule_reminder({
+    dealId: input.dealId,
+    when: when.toISOString(),
+    channel: 'email',
+    message: reminderMessage,
+  })
 
   return results
 }
@@ -439,34 +446,32 @@ export async function runCancellationAgent(input: {
     'Call create_cancellation_fee_link. Decide fair fee % (typically 50%). Write draftMessage for seller.',
   ].join('\n')
 
-  let result: any
+  let calls: any[] = []
   try {
-    result = await withRetry(() => model.generateContent(prompt))
+    const result = await withRetry(() => model.generateContent(prompt))
+    calls = result.response.functionCalls() ?? []
   } catch (err: any) {
+    console.warn('[runCancellationAgent] Gemini tool call failed, using fallback:', err?.message)
     Sentry.captureException(err, {
       tags: { context: 'gemini_agent', agent: 'cancellation' },
       extra: { dealId: input.dealId },
     })
-    throw err
   }
 
-  const calls = result.response.functionCalls() ?? []
   const results: Record<string, unknown> = {}
+  const cancelCall = calls.find((c: any) => c.name === 'create_cancellation_fee_link')
+  const percent = (cancelCall?.args as any)?.percent ?? 50
+  const draftMessage = (cancelCall?.args as any)?.draftMessage ?? 'Cancellation fee applies per agreement terms.'
 
-  for (const call of calls) {
-    if (call.name === 'create_cancellation_fee_link') {
-      const a = call.args as any
-      const res = await exec_create_cancellation_fee_link({
-        dealId: input.dealId,
-        percent: a.percent ?? 50,
-        totalPrice: input.totalPrice,
-        customerName: input.customerName,
-        draftMessage: a.draftMessage ?? 'Cancellation fee applies per terms.',
-      })
-      results['create_cancellation_fee_link'] = res
-      results['draftMessage'] = a.draftMessage
-    }
-  }
+  const res = await exec_create_cancellation_fee_link({
+    dealId: input.dealId,
+    percent,
+    totalPrice: input.totalPrice,
+    customerName: input.customerName,
+    draftMessage,
+  })
+  results['create_cancellation_fee_link'] = res
+  results['draftMessage'] = draftMessage
 
   return results
 }

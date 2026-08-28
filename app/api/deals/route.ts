@@ -48,8 +48,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ dealId: deal.id, agentResult }, { status: 201 })
   } catch (err: any) {
-    console.error('[/api/deals POST]', err)
-    return NextResponse.json({ error: err.message ?? 'Internal server error' }, { status: 500 })
+    console.error('[/api/deals POST]', err?.message, err?.stack || err)
+    return NextResponse.json({ error: err?.message || 'Failed to create deal' }, { status: 500 })
   }
 }
 
