@@ -250,24 +250,17 @@ export async function exec_send_reminder(args: { reminderId: string }) {
     const recipientEmail = deal.customerEmail?.trim() || deal.seller.email
     if (!recipientEmail) throw new Error('Recipient email is required to send reminder')
 
-    const payLinkLine = (depositPayment?.shortUrl && !depositPaid)
-      ? `\nDeposit Payment Link: ${depositPayment.shortUrl}\n`
-      : ''
-
     const emailBody =
-      `Hi ${deal.customerName},\n\n` +
-      `This is a payment reminder for your order: "${deal.description}".\n\n` +
-      `Due date: ${dueDateStr}\n` +
-      `Total price: ${fmtINR(deal.price)}\n` +
-      `${depositLine}\n` +
-      `Remaining balance due: ${fmtINR(remainder)}\n` +
-      payLinkLine +
-      `\nPlease arrange payment before the due date. Thank you!`
+      `Hi,\n\n` +
+      `This is a friendly reminder that your payment is due soon.\n\n` +
+      `If you've already paid, please ignore this message.\n\n` +
+      `Thank you,\n` +
+      `Vaultri Team`
 
     await transporter.sendMail({
       from: process.env.GMAIL_USER,
       to: recipientEmail,
-      subject: `Payment Reminder: ${deal.customerName} — due ${dueDateStr}`,
+      subject: `Payment Reminder: ${deal.customerName} — Vaultri`,
       text: emailBody,
     })
     await prisma.reminder.update({
