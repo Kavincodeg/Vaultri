@@ -91,7 +91,7 @@ export default function NewDealPage() {
                 <input id='customer-name' type='text' className='form-input' placeholder='e.g. Priya Sharma' value={customerName} onChange={e => setCustomerName(e.target.value)} required />
               </div>
               <div className='form-group'>
-                <label className='form-label' htmlFor='customer-email'>Customer email (for reminders)</label>
+                <label className='form-label' htmlFor='customer-email'>Customer email (optional — for reminders)</label>
                 <input id='customer-email' type='email' className='form-input' placeholder='e.g. priya@example.com' value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
               </div>
             </div>

@@ -246,8 +246,11 @@ export async function exec_send_reminder(args: { reminderId: string }) {
       ? `Deposit paid: ${fmtINR(depositAmt)} (${deal.depositPercent}%)`
       : `Deposit (pending — not yet received): ${fmtINR(depositAmt)} (${deal.depositPercent}%)`
 
-    // Send to customer's email if provided; fallback to signed-in seller's email
-    const recipientEmail = deal.customerEmail?.trim() || deal.seller.email
+    // If a customer email was provided on deal creation, send exclusively to that customer email.
+    // If not provided, fallback to sending to the signed-in seller's email.
+    const hasCustomerEmail = Boolean(deal.customerEmail && deal.customerEmail.trim().length > 0)
+    const recipientEmail = hasCustomerEmail ? deal.customerEmail!.trim() : deal.seller.email
+
     if (!recipientEmail) throw new Error('Recipient email is required to send reminder')
 
     const emailBody =
@@ -270,7 +273,9 @@ export async function exec_send_reminder(args: { reminderId: string }) {
     await logAudit(
       reminder.dealId,
       'reminder_sent',
-      'Sent reminder to email: ' + recipientEmail,
+      hasCustomerEmail
+        ? `Sent reminder to customer email: ${recipientEmail}`
+        : `Sent reminder to seller email (fallback): ${recipientEmail}`,
     )
   } catch (err: any) {
     await prisma.reminder.update({
