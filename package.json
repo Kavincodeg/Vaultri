@@ -31,8 +31,7 @@
     "nodemailer": "^7.0.13",
     "razorpay": "^2.9.6",
     "react": "^18",
-    "react-dom": "^18",
-    "resend": "^4.0.1"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",

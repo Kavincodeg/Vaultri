@@ -18,7 +18,7 @@ A business-protection tool for independent and artisan sellers (jewellers, tailo
 | AI Agent | Gemini 2.0 Flash — function calling, server-side only |
 | Payments | Razorpay Payment Links API + signed webhooks |
 | Background Jobs | Upstash QStash — signed scheduled HTTP calls, no persistent worker |
-| Email | Resend |
+| Email | Nodemailer + Gmail SMTP (free, no domain required) |
 | Rate Limiting | @upstash/ratelimit (edge middleware) |
 | Error Monitoring | Sentry |
 | Hosting | Vercel (free tier) |
@@ -66,7 +66,7 @@ Reminders are triggered **automatically** by Upstash QStash on a schedule — no
 1. Create a deal → AI drafts contract + Razorpay deposit link + saves Reminder to DB with `status = scheduled`
 2. Every 12 hours, Upstash QStash calls `POST /api/cron/check-reminders` (signed request)
 3. The route finds all `scheduled` reminders where `deal.dueDate` is within 3 days
-4. Calls `exec_send_reminder` for each → email fires via Resend → status updates to `sent`
+4. Calls `exec_send_reminder` for each → email fires via Gmail SMTP → status updates to `sent`
 5. "Send Reminder Now" button on the deal page still works for manual one-off sends
 
 No worker process, no Render, fully serverless.
@@ -84,7 +84,7 @@ Seller (Web App)
       │
       ├─────────────────────────────────────┐
       ▼              ▼              ▼        ▼
- Postgres DB    Razorpay API    Resend    Upstash QStash
+ Postgres DB    Razorpay API    Gmail     Upstash QStash
                                          (cron → /api/cron/
                                           check-reminders)
 ```
@@ -97,7 +97,7 @@ Seller (Web App)
 | `create_deposit_link` | Creates a Razorpay Payment Link for the deposit |
 | `create_cancellation_fee_link` | Creates a Razorpay Payment Link for the cancellation fee |
 | `schedule_reminder` | Saves reminder to DB (+ optionally enqueues BullMQ job) |
-| `send_reminder` | Sends email via Resend, updates reminder status |
+| `send_reminder` | Sends email via Gmail SMTP, updates reminder status |
 
 Every tool call is written to `AuditLog`. The agent never contacts the customer directly.
 
@@ -122,7 +122,7 @@ Every tool call is written to `AuditLog`. The agent never contacts the customer 
 | Vercel | Next.js hosting | Free |
 | Neon | PostgreSQL database | Free |
 | Upstash | Redis (rate limiting) | Free |
-| Resend | Transactional email | Free (100 emails/day) |
+| Gmail SMTP | Transactional email | Free, no domain required |
 | Sentry | Error monitoring | Free |
 | Razorpay | Payments | Test mode (free) |
 

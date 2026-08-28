@@ -42,7 +42,8 @@ jobs:
           RAZORPAY_KEY_ID: rzp_test_dummy
           RAZORPAY_KEY_SECRET: dummy
           RAZORPAY_WEBHOOK_SECRET: dummy
-          RESEND_API_KEY: dummy
+          GMAIL_USER: dummy@gmail.com
+          GMAIL_APP_PASSWORD: dummy
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -51,7 +52,7 @@ jobs:
           QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
           QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
 
-      deploy:
+  deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
     needs: build
@@ -64,7 +65,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest

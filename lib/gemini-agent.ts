@@ -3,11 +3,17 @@ import * as Sentry from '@sentry/nextjs'
 import { GoogleGenerativeAI, FunctionCallingMode } from '@google/generative-ai'
 import { prisma } from '@/lib/prisma'
 import { razorpay } from '@/lib/razorpay'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { logAudit } from '@/lib/audit'
 
 const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-const resend = new Resend(process.env.RESEND_API_KEY!)
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, ''),
+  },
+})
 
 // Retry helper — retries on 503 Service Unavailable with exponential backoff
 async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
@@ -93,7 +99,7 @@ const TOOLS = [
       },
       {
         name: 'send_reminder',
-        description: 'Send scheduled reminder via Resend email.',
+        description: 'Send scheduled reminder via Gmail email.',
         parameters: {
           type: 'OBJECT',
           properties: { reminderId: { type: 'STRING' } },
@@ -248,14 +254,11 @@ export async function exec_send_reminder(args: { reminderId: string }) {
       `Remaining balance due: ${fmtINR(remainder)}\n\n` +
       `Please arrange payment before the due date. Thank you!`
 
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
-      // In sandbox mode (onboarding@resend.dev), Resend only accepts
-      // delivered@resend.dev as the recipient. Use the seller's real email
-      // once a verified custom domain is set as EMAIL_FROM.
-      to: (process.env.EMAIL_FROM ?? '').includes('resend.dev')
-        ? 'delivered@resend.dev'
-        : deal.seller.email,
+    if (!deal.customerEmail) throw new Error('Customer email is required to send reminder')
+
+    await transporter.sendMail({
+      from: process.env.GMAIL_USER,
+      to: deal.customerEmail,
       subject: `Payment Reminder: ${deal.customerName} — due ${dueDateStr}`,
       text: emailBody,
     })
@@ -266,7 +269,7 @@ export async function exec_send_reminder(args: { reminderId: string }) {
     await logAudit(
       reminder.dealId,
       'reminder_sent',
-      'Sent reminder to seller email: ' + reminder.deal.seller.email,
+      'Sent reminder to customer email: ' + reminder.deal.customerEmail,
     )
   } catch (err: any) {
     await prisma.reminder.update({
