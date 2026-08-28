@@ -1,47 +1,142 @@
-# Vaultri — Every deal, protected.
+<div align="center">
 
-![Vaultri demo — create a deal, see AI-drafted terms, collect deposit](./docs/demo.gif)
+# 🛡️ Vaultri
 
-A business-protection tool for independent and artisan sellers (jewellers, tailors, bakers, freelance designers). Sellers describe a deal in plain language; the product generates contract terms, collects an upfront deposit via Razorpay, tracks payment status, and follows up with automated reminders.
+### Turn every custom order into a protected deal — in under a minute.
 
-> "Turn every custom order into a protected deal in under a minute — no contract-writing, no chasing payments manually."
+[![Live Demo](https://img.shields.io/badge/Live-vaultri.vercel.app-C9A227?style=for-the-badge)](https://vaultri.vercel.app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js%2014-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
+
+[Live Demo](https://vaultri.vercel.app) · [Report a Bug](../../issues)
+
+</div>
 
 ---
 
-## 🚀 Tech Stack
+![Vaultri demo — create a deal, see AI-drafted terms, collect deposit](./docs/demo.gif)
+*Creating a deal, generating a deposit link, and watching payment status update — live on Razorpay test mode.*
+
+---
+
+## The Problem
+
+> "I design and sell jewellery. My pieces take 3 days to make. I've had customers cancel after the piece is finished, copy my designs and get them made cheaper elsewhere, and pay me 60 days late. I have no contract, no deposit system, no protection. Every sale is an act of faith — and sometimes faith is expensive."
+
+Independent sellers of custom-made goods — jewellers, tailors, bakers, freelance designers — take on real business risk (materials, time, cash flow) with none of the protections a registered business has by default: no written terms, no upfront deposit, no cancellation policy, no paper trail. These tools exist in the corporate world but have never been packaged simply enough for a one-person seller working over WhatsApp or Instagram.
+
+**The result:** lost income to last-minute cancellations, copied designs sold cheaper elsewhere, and payments delayed months with no leverage to prevent it.
+
+## The Solution
+
+Vaultri turns a plain-language deal description into a protected transaction automatically:
+
+1. **Describe the deal** — "Priya wants a custom necklace, ₹8,000, needs it by Aug 30"
+2. **AI drafts the terms** — deposit %, cancellation policy, IP/design clauses, late-payment terms
+3. **A real deposit link is generated** — via Razorpay Payment Links, shareable over WhatsApp in one tap
+4. **Payment status updates automatically** — signed, idempotent Razorpay webhooks
+5. **Reminders and cancellation-fee flows run on schedule** — without the seller writing a single follow-up message
+
+---
+
+## Key Decisions & Trade-offs
+
+*The reasoning behind a few deliberate choices — including what I chose not to do, and why.*
+
+- **AI-drafted terms are explicitly not legally binding contracts.** Every generated contract includes a plain-language disclaimer footer. This is a protection layer, not a legal product — going further would need legal review this project doesn't have, and overstating legal weight would be dishonest to the seller relying on it.
+- **The agent works from a fixed tool allowlist, not free-form generation.** `draft_contract`, `create_deposit_link`, `schedule_reminder`, and similar tools are the only actions the AI can take, and every call is written to an immutable audit log. In a product that touches real payments, predictability and auditability mattered more than flexibility.
+- **Reminders run without a persistent worker process.** Rather than hosting a 24/7 BullMQ worker (which needs paid or unreliable free-tier hosting), reminders are handled by Upstash QStash on a scheduled HTTP call. This keeps the entire stack on free infrastructure without sacrificing reliability, at the cost of reminder granularity (every 12 hours, not real-time).
+- **Gmail SMTP over a transactional email provider like Resend.** Providers like Resend restrict delivery to verified domains on their free tier — without owning a domain, that means emails can only reach a test inbox, not real customers. Gmail SMTP trades a fully branded sender address for something that actually works today, for free.
+- **Manual "Send Reminder Now" alongside the automated cron.** Automated reminders build trust over time, but a seller who wants to nudge a customer *right now* shouldn't have to wait for the next scheduled run — so both paths exist.
+
+---
+
+## Features
+
+- ✅ **AI Deal Protection & Contract Generation** — plain-language input becomes drafted terms: deposit %, 50% cancellation fee, IP clauses, late-payment terms
+- ✅ **Razorpay Payment Links** — automated deposit and cancellation-fee links with real-time webhook sync
+- ✅ **Smart Reminder Delivery** — customer email if provided, seller-account fallback if not; scheduled automatically 2 days before due date via QStash, plus one-click manual send
+- ✅ **Deal Protection Score** — 0–100 score analyzing contract drafting, deposit security, IP terms, and active reminders
+- ✅ **Light & dark theme support** with instant toggle
+- ✅ **Interactive API diagnostics** — one-click live connection testing for Gmail SMTP and Razorpay from the settings page
+- ✅ **Immutable audit trail** — every deal action permanently recorded
+- 📋 *Planned:* WhatsApp reminders, analytics dashboard, billing/subscriptions
+
+---
+
+## Tech Stack
 
 | Layer | Choice | Notes |
 |---|---|---|
 | **Framework** | Next.js 14 (App Router, TypeScript) | Server components, API routes, Edge middleware |
-| **Styling & UI** | Vanilla CSS + Design System | Custom themes (Light & Dark mode), CSS variables |
-| **Database** | PostgreSQL via Neon (Prisma ORM) | Serverless PostgreSQL database |
-| **Auth** | NextAuth v4 | Credentials provider (Email + Bcrypt password hash) |
-| **AI Agent** | Gemini 2.5 Flash + Resilient Fallback | Tool-calling server-side with fallback guardrails |
-| **Payments** | Razorpay Payment Links API + Webhooks | Signed webhooks (`/api/webhook`) for instant status updates |
+| **Styling & UI** | Vanilla CSS + design system | Custom light/dark themes, CSS variables |
+| **Database** | PostgreSQL via Neon (Prisma ORM) | Serverless PostgreSQL |
+| **Auth** | NextAuth v4 | Credentials provider (email + bcrypt hash) |
+| **AI Agent** | Gemini 2.5 Flash + resilient fallback | Tool-calling, server-side only, fallback guardrails |
+| **Payments** | Razorpay Payment Links API + webhooks | Signed webhooks (`/api/webhook`) for instant status updates |
 | **Background Jobs** | Upstash QStash | Signed scheduled HTTP calls (`0 */12 * * *`), zero persistent workers |
 | **Email** | Nodemailer + Gmail SMTP | Transactional reminders, free, no custom domain required |
 | **Rate Limiting** | `@upstash/ratelimit` + Upstash Redis | Edge middleware API protection |
 | **Monitoring** | Sentry (`@sentry/nextjs`) | Server, client, and edge error tracking |
-| **Hosting & CI/CD**| Vercel + GitHub Actions | Automated build, lint & deploy on push to `main` |
+| **Hosting & CI/CD** | Vercel + GitHub Actions | Automated build, lint & deploy on push to `main` |
 
 ---
 
-## ✨ Key Features
+## System Architecture
 
-- **🤖 AI Deal Protection & Contract Generation:** Plain language input automatically converts into plain-English contracts with customized deposit %, 50% cancellation fee, intellectual property clauses, and late payment terms.
-- **💳 Razorpay Payment Links:** Automated creation of deposit and cancellation fee payment links with real-time webhook sync.
-- **✉️ Smart Reminder Delivery:**
-  - Enter an optional customer email on deal creation to send reminders directly to the customer.
-  - Automatically falls back to the seller's account email if omitted.
-  - Scheduled automatically 2 days before the due date via QStash cron, plus one-click "Send Reminder Now" on deal pages.
-- **🛡️ Deal Protection Score:** Interactive 0–100 score analyzing contract drafting, deposit security, IP terms, and active reminders.
-- **🎨 Theme Support:** Full light and dark mode support with instant toggle and settings selector.
-- **🔑 Interactive API Configuration & Diagnostics:** Settings page with one-click live connection testing for Gmail SMTP and Razorpay, plus copyable Webhook and Cron endpoints.
-- **📜 Immutable Audit Trail:** Every deal action (creation, contracts, payment links, reminder dispatches) is permanently recorded.
+```
+ Seller (Web App)
+       │
+       ▼
+  Next.js API + Gemini Agent
+  (tool-calling, server-side only, with fallback engine)
+       │
+       ├─────────────────────────────────────┐
+       ▼              ▼              ▼        ▼
+  Postgres DB    Razorpay API    Gmail SMTP   Upstash QStash
+  (Neon)        (Payment Links,  (Nodemailer)  (Cron → /api/cron/
+                 Webhooks)                      check-reminders)
+```
+
+### Agent Tool Allowlist
+
+| Tool | Action |
+|---|---|
+| `draft_contract` | Generates contract terms — deposit %, cancellation policy, IP clause, late-payment terms |
+| `create_deposit_link` | Creates a Razorpay Payment Link for the deposit |
+| `create_cancellation_fee_link` | Creates a Razorpay Payment Link for the cancellation fee |
+| `schedule_reminder` | Saves a reminder record for cron processing |
+| `send_reminder` | Dispatches the reminder email via Gmail SMTP, updates the audit trail |
+
+Every tool execution is logged in the `AuditLog` table. The agent never contacts a customer outside these allowed functions.
+
+## Reminder Flow
+
+```
+Deal Created
+   │
+   ├──> AI agent drafts contract + generates Razorpay link
+   │
+   └──> Creates Reminder row in DB (status: 'scheduled')
+           │
+           ▼ Every 12 hours (0 */12 * * *)
+     Upstash QStash calls POST /api/cron/check-reminders (signed request)
+           │
+           ▼
+     Queries upcoming deals (due within 3 days, not completed/cancelled)
+           │
+           ▼
+     Dispatches reminder via Nodemailer + Gmail SMTP
+           │
+           ▼
+     Email delivered to customer (or seller fallback) ──> status: 'sent'
+```
+
+Sellers can also click **"Send Reminder Now"** on any deal page for an instant, on-demand dispatch — no worker daemon or persistent hosting required either way.
 
 ---
 
-## 🛠️ Getting Started
+## Getting Started
 
 ### 1. Clone & install dependencies
 
@@ -53,7 +148,7 @@ npm install
 
 ### 2. Configure environment variables
 
-Create a `.env.local` file in the root directory and populate the required keys:
+Create a `.env.local` file in the root directory:
 
 ```env
 # ─── Database ───────────────────────────────────────────────────
@@ -65,7 +160,7 @@ NEXTAUTH_SECRET="your-generated-nextauth-secret"
 
 # ─── Gmail SMTP (Email Reminders) ──────────────────────────────
 GMAIL_USER="yourname@gmail.com"
-GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"   # 16-character Google App Password
+GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"
 
 # ─── Google Gemini AI ───────────────────────────────────────────
 GEMINI_API_KEY="your-gemini-api-key"
@@ -94,96 +189,68 @@ SENTRY_ORG="your-sentry-org"
 SENTRY_PROJECT="vaultri"
 ```
 
-### 3. Generate Prisma Client & Run Migrations
+### 3. Generate Prisma client & run migrations
 
 ```bash
 npx prisma generate
 npx prisma migrate dev
 ```
 
-### 4. Start Development Server
+### 4. Start the development server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 🔔 Reminder Flow (QStash Cron & Serverless)
+## Free Infrastructure Stack
 
-```
-Deal Created
-   │
-   ├──> AI Agent drafts contract + generates Razorpay link
-   │
-   └──> Creates Reminder row in DB (status: 'scheduled')
-           │
-           ▼ Every 12 Hours (0 */12 * * *)
-     Upstash QStash calls POST /api/cron/check-reminders (signed request)
-           │
-           ▼
-     Queries upcoming deals (due within 3 days, not completed/cancelled)
-           │
-           ▼
-     Fires exec_send_reminder() via Nodemailer + Gmail SMTP
-           │
-           ▼
-     Email delivered to Customer (or Seller fallback) ──> Status: 'sent'
-```
-
-1. **Automatic Delivery:** Upstash QStash calls `/api/cron/check-reminders` on a `0 */12 * * *` schedule.
-2. **Manual Delivery:** Sellers can click **"Send Reminder Now"** directly on any deal page for instant dispatch.
-3. **Fully Serverless:** No persistent worker daemon or Render instance required.
-
----
-
-## 🏗️ System Architecture
-
-```
- Seller (Web App)
-       │
-       ▼
-  Next.js API + Gemini Agent
-  (tool-calling, server-side only with fallback engine)
-       │
-       ├─────────────────────────────────────┐
-       ▼              ▼              ▼        ▼
-  Postgres DB    Razorpay API    Gmail     Upstash QStash
-  (Neon)        (Payment Links, (Nodemailer  (Cron → /api/cron/
-                 Webhooks)       SMTP)        check-reminders)
-```
-
-### Agent Tool Allowlist
-
-| Tool | Action |
-|---|---|
-| `draft_contract` | Generates contract terms with deposit %, cancellation policy, IP clause, and late-payment terms |
-| `create_deposit_link` | Creates a Razorpay Payment Link for the deposit |
-| `create_cancellation_fee_link` | Creates a Razorpay Payment Link for the cancellation fee |
-| `schedule_reminder` | Saves reminder record in DB for cron processing |
-| `send_reminder` | Dispatches reminder email via Gmail SMTP and updates audit trail |
-
-Every tool execution is logged in the `AuditLog` table. The agent never contacts customers outside allowed functions.
-
----
-
-## 📦 Free Infrastructure Stack
+*Built entirely on free tiers — no paid services required to run or evaluate this project.*
 
 | Service | Purpose | Tier |
 |---|---|---|
-| **Vercel** | Next.js Hosting & Serverless Functions | Free Tier |
-| **Neon** | Managed PostgreSQL Database | Free Tier |
-| **Upstash Redis** | Edge Rate Limiting | Free Tier |
-| **Upstash QStash** | Scheduled Cron Calls | Free Tier |
-| **Gmail SMTP** | Transactional Email Delivery | Free (via Google App Passwords) |
-| **Google Gemini** | AI Agent & Contract Generation | Free Tier API |
-| **Razorpay** | Payment Links & Webhooks | Test Mode (Free) |
-| **Sentry** | Full-stack Error Monitoring | Free Developer Tier |
+| Vercel | Hosting & serverless functions | Free |
+| Neon | Managed PostgreSQL | Free |
+| Upstash Redis | Edge rate limiting | Free |
+| Upstash QStash | Scheduled cron calls | Free |
+| Gmail SMTP | Transactional email | Free (Google App Passwords) |
+| Google Gemini | AI agent & contract generation | Free tier API |
+| Razorpay | Payment links & webhooks | Test mode (free) |
+| Sentry | Full-stack error monitoring | Free |
 
 ---
 
-## ⚖️ Legal Note
+## Roadmap
 
-Vaultri-drafted contracts are plain-language deal summaries designed to protect independent sellers and establish clear mutual expectations, not legally binding counsel. Every generated contract includes a standard disclaimer footer. See `LIVE_MODE.md` for KYC and compliance notes before switching to live payments.
+| Phase | Status |
+|---|---|
+| Scaffold, auth, deal creation, webhooks, dashboard | ✅ Done |
+| Reminders, cancellation flow, audit log, rate limiting | ✅ Done |
+| Monitoring, CI/CD, deploy, live-mode compliance guide | ✅ Done |
+| Automated QStash reminder scheduling | ✅ Done |
+| WhatsApp reminders, analytics dashboard, billing | 📋 Planned |
+
+---
+
+## Legal Note
+
+Vaultri-drafted contracts are plain-language deal summaries designed to protect independent sellers and establish clear mutual expectations — not legally binding counsel. Every generated contract includes a standard disclaimer footer. See [`LIVE_MODE.md`](./LIVE_MODE.md) for KYC and compliance notes before switching to live payments.
+
+---
+
+## What I'd Do Differently
+
+Right now the entire product is seller-facing — a customer only ever sees a Razorpay checkout page, never a branded confirmation of what they agreed to. With more time I'd build a lightweight customer-facing deal view, so both sides of the transaction have the same record. I'd also move deposit-percentage recommendations from a fixed heuristic to something that accounts for order category and price point — a 40% deposit makes sense on a ₹5,000 order, less obviously so on a ₹50,000 one.
+
+---
+
+<div align="center">
+
+Built by [Your Name](https://github.com/Kavincodeg) · [LinkedIn](#)
+
+⭐ If this project was useful or interesting, consider giving it a star.
+
+</div>
