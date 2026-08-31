@@ -5,10 +5,11 @@
 ### Turn every custom order into a protected deal — in under a minute.
 
 [![Live Demo](https://img.shields.io/badge/Live-vaultri.vercel.app-C9A227?style=for-the-badge)](https://vaultri.vercel.app)
+[![Watch Demo](https://img.shields.io/badge/Watch-Loom%20Walkthrough-8B5CF6?style=for-the-badge&logo=loom)](https://www.loom.com/share/6eb00be78ee64e3689177eb9c2070865)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js%2014-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
 
-[Live Demo](https://vaultri.vercel.app) · [Report a Bug](../../issues)
+[Live Demo](https://vaultri.vercel.app) · [🎥 Watch the Loom Walkthrough](https://www.loom.com/share/6eb00be78ee64e3689177eb9c2070865) · [Report a Bug](../../issues)
 
 </div>
 
@@ -16,6 +17,8 @@
 
 ![Vaultri demo — create a deal, see AI-drafted terms, collect deposit](./docs/demo.gif)
 *Creating a deal, generating a deposit link, and watching payment status update — live on Razorpay test mode.*
+
+🎥 **[Watch the 2-minute walkthrough on Loom →](https://www.loom.com/share/6eb00be78ee64e3689177eb9c2070865)**
 
 ---
 
