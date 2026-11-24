@@ -4,14 +4,17 @@ import com.vaultri.core.deal.entity.DealStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -36,6 +39,14 @@ class DealExceptionHandlerTest {
         @GetMapping("/test/invalid-fee")
         public void throwInvalidFee() {
             throw new InvalidCancellationFeeException("Fee exceeds maximum allowable");
+        }
+
+        @GetMapping("/test/idempotency-violation")
+        public void throwIdempotencyDataIntegrityViolation() {
+            throw new DataIntegrityViolationException(
+                    "ERROR: duplicate key value violates unique constraint \"uq_idempotency_seller_key\"\n" +
+                    "Detail: Key (seller_id, idempotency_key)=(11111111-1111-1111-1111-111111111111, key-xyz) already exists."
+            );
         }
     }
 
@@ -78,5 +89,22 @@ class DealExceptionHandlerTest {
                 .andExpect(jsonPath("$.status", is(400)))
                 .andExpect(jsonPath("$.title", is("Invalid Cancellation Fee")))
                 .andExpect(jsonPath("$.detail", is("Fee exceeds maximum allowable")));
+    }
+
+    @Test
+    @DisplayName("DataIntegrityViolationException generic fallback produces 409 Conflict mentioning neither email nor constraint name")
+    void testDataIntegrityViolationFallbackMentionsNeitherEmailNorConstraint() throws Exception {
+        MvcResult result = mockMvc.perform(get("/test/idempotency-violation").accept(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status", is(409)))
+                .andExpect(jsonPath("$.title", is("Conflict")))
+                .andExpect(jsonPath("$.detail", is("Request conflicts with existing data")))
+                .andReturn();
+
+        String body = result.getResponse().getContentAsString();
+        assertThat(body).doesNotContainIgnoringCase("email");
+        assertThat(body).doesNotContainIgnoringCase("uq_idempotency_seller_key");
+        assertThat(body).doesNotContainIgnoringCase("seller_id");
+        assertThat(body).doesNotContainIgnoringCase("idempotency_key");
     }
 }

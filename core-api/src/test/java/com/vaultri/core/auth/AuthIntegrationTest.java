@@ -6,8 +6,10 @@ import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
 import com.vaultri.core.AbstractIntegrationTest;
+import com.vaultri.core.auth.config.JwtProperties;
 import com.vaultri.core.auth.dto.*;
 import com.vaultri.core.auth.entity.Seller;
 import com.vaultri.core.auth.repository.RefreshTokenRepository;
@@ -22,13 +24,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Date;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -56,7 +61,16 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     private TokenService tokenService;
 
     @Autowired
+    private TestTokenHelper testTokenHelper;
+
+    @Autowired
     private DealService dealService;
+
+    @Autowired
+    private UserDetailsService userDetailsService;
+
+    @Autowired
+    private JwtProperties jwtProperties;
 
     @Test
     @DisplayName("Signup: valid payload succeeds (201), normalizes lowercase email, rejects duplicate case-insensitively (409)")
@@ -237,7 +251,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isUnauthorized());
 
         // 3. Expired token -> 401
-        String expiredToken = tokenService.generateExpiredTokenForTesting(seller);
+        String expiredToken = testTokenHelper.generateExpiredToken(seller);
         mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + expiredToken))
                 .andExpect(status().isUnauthorized());
 
@@ -407,5 +421,217 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.customerName").value("Client B"))
                 .andExpect(jsonPath("$.price").value(150000))
                 .andExpect(jsonPath("$.depositAmount").value(30000));
+    }
+
+    @Test
+    @DisplayName("Hardening 1: Atomic refresh rotation under 10 concurrent threads (repeated 10 times)")
+    void testConcurrentRefreshRotation() throws Exception {
+        int repetitions = 10;
+        int threadCount = 10;
+
+        for (int rep = 0; rep < repetitions; rep++) {
+            String email = "refresh_race_" + rep + "_" + UUID.randomUUID() + "@vaultri.com";
+            String password = "Password123!";
+
+            mockMvc.perform(post("/api/v1/auth/signup")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new SignupRequest(email, password, "Race Tester " + rep, null))))
+                    .andExpect(status().isCreated());
+
+            MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new LoginRequest(email, password))))
+                    .andExpect(status().isOk())
+                    .andReturn();
+
+            AuthResponse loginResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class);
+            String sharedRefreshToken = loginResponse.refreshToken();
+
+            Seller seller = sellerRepository.findByEmailIgnoreCase(email).orElseThrow();
+            int initialCount = refreshTokenRepository.findBySellerId(seller.getId()).size();
+            assertThat(initialCount).isEqualTo(1);
+
+            CountDownLatch readyLatch = new CountDownLatch(threadCount);
+            CountDownLatch startLatch = new CountDownLatch(1);
+            ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (int i = 0; i < threadCount; i++) {
+                futures.add(executor.submit(() -> {
+                    readyLatch.countDown();
+                    startLatch.await();
+
+                    MvcResult res = mockMvc.perform(post("/api/v1/auth/refresh")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(new RefreshTokenRequest(sharedRefreshToken))))
+                            .andReturn();
+
+                    return res.getResponse().getStatus();
+                }));
+            }
+
+            readyLatch.await(5, TimeUnit.SECONDS);
+            startLatch.countDown();
+
+            int count200 = 0;
+            int count401 = 0;
+            for (Future<Integer> f : futures) {
+                int statusCode = f.get(10, TimeUnit.SECONDS);
+                if (statusCode == 200) count200++;
+                else if (statusCode == 401) count401++;
+            }
+            executor.shutdown();
+
+            assertThat(count200)
+                    .as("Exactly one refresh call must succeed with 200 on rep %d", rep)
+                    .isEqualTo(1);
+            assertThat(count401)
+                    .as("The other nine refresh calls must fail with 401 on rep %d", rep)
+                    .isEqualTo(9);
+
+            List<?> tokensAfter = refreshTokenRepository.findBySellerId(seller.getId());
+            assertThat(tokensAfter)
+                    .as("Exactly one new refresh token row must exist (total 2) on rep %d", rep)
+                    .hasSize(2);
+        }
+    }
+
+    @Test
+    @DisplayName("Hardening 2: Concurrent signup with same email (mixed case) across 10 threads")
+    void testConcurrentSignupSameEmail() throws Exception {
+        int threadCount = 10;
+        String baseEmail = "concurrent_user_" + UUID.randomUUID() + "@vaultri.com";
+
+        CountDownLatch readyLatch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+
+        List<Future<Integer>> futures = new ArrayList<>();
+        for (int i = 0; i < threadCount; i++) {
+            final int index = i;
+            futures.add(executor.submit(() -> {
+                readyLatch.countDown();
+                startLatch.await();
+
+                // Vary upper and lower case
+                String emailVariant = (index % 2 == 0)
+                        ? baseEmail.toUpperCase()
+                        : (index % 3 == 0)
+                        ? baseEmail.substring(0, 5).toUpperCase() + baseEmail.substring(5).toLowerCase()
+                        : baseEmail.toLowerCase();
+
+                SignupRequest signup = new SignupRequest(
+                        emailVariant,
+                        "Password123!",
+                        "User " + index,
+                        null
+                );
+
+                MvcResult res = mockMvc.perform(post("/api/v1/auth/signup")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(signup)))
+                        .andReturn();
+
+                return res.getResponse().getStatus();
+            }));
+        }
+
+        readyLatch.await(5, TimeUnit.SECONDS);
+        startLatch.countDown();
+
+        int count201 = 0;
+        int count409 = 0;
+        int count500 = 0;
+        for (Future<Integer> f : futures) {
+            int status = f.get(10, TimeUnit.SECONDS);
+            if (status == 201) count201++;
+            else if (status == 409) count409++;
+            else if (status == 500) count500++;
+        }
+        executor.shutdown();
+
+        assertThat(count201).as("Exactly one signup must succeed with 201").isEqualTo(1);
+        assertThat(count409).as("The rest must fail with 409 Conflict").isEqualTo(9);
+        assertThat(count500).as("None must fail with 500 Internal Server Error").isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("Hardening 3: JWT decoder strictness - rejects wrong issuer, alg 'none', and HS384")
+    void testJwtDecoderStrictness() throws Exception {
+        String email = "jwt_strict_" + UUID.randomUUID() + "@vaultri.com";
+        mockMvc.perform(post("/api/v1/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SignupRequest(email, "Password123!", "Strict Tester", null))))
+                .andExpect(status().isCreated());
+
+        Seller seller = sellerRepository.findByEmailIgnoreCase(email).orElseThrow();
+        byte[] secretBytes = jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8);
+
+        // 1. Token with wrong issuer returns 401
+        SignedJWT wrongIssuerJwt = new SignedJWT(
+                new JWSHeader(JWSAlgorithm.HS256),
+                new JWTClaimsSet.Builder()
+                        .issuer("evil-issuer")
+                        .subject(seller.getId().toString())
+                        .claim("email", seller.getEmail())
+                        .issueTime(new Date())
+                        .expirationTime(new Date(System.currentTimeMillis() + 60000))
+                        .build()
+        );
+        wrongIssuerJwt.sign(new MACSigner(secretBytes));
+        String wrongIssuerToken = wrongIssuerJwt.serialize();
+
+        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + wrongIssuerToken))
+                .andExpect(status().isUnauthorized());
+
+        // 2. Unsigned token with alg "none" returns 401
+        PlainJWT plainJwt = new PlainJWT(
+                new JWTClaimsSet.Builder()
+                        .issuer(jwtProperties.getIssuer())
+                        .subject(seller.getId().toString())
+                        .claim("email", seller.getEmail())
+                        .issueTime(new Date())
+                        .expirationTime(new Date(System.currentTimeMillis() + 60000))
+                        .build()
+        );
+        String unsignedToken = plainJwt.serialize();
+
+        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + unsignedToken))
+                .andExpect(status().isUnauthorized());
+
+        // 3. Token signed with HS384 using the same secret returns 401
+        SignedJWT hs384Jwt = new SignedJWT(
+                new JWSHeader(JWSAlgorithm.HS384),
+                new JWTClaimsSet.Builder()
+                        .issuer(jwtProperties.getIssuer())
+                        .subject(seller.getId().toString())
+                        .claim("email", seller.getEmail())
+                        .issueTime(new Date())
+                        .expirationTime(new Date(System.currentTimeMillis() + 60000))
+                        .build()
+        );
+        hs384Jwt.sign(new MACSigner(secretBytes));
+        String hs384Token = hs384Jwt.serialize();
+
+        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + hs384Token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Hardening 4: No default login - HTTP Basic returns 401 and UserDetailsService stub throws")
+    void testNoDefaultLoginHttpBasicReturns401() throws Exception {
+        // HTTP Basic credentials "user:user" on protected endpoint returns 401
+        String basicUser = Base64.getEncoder().encodeToString("user:user".getBytes(StandardCharsets.UTF_8));
+        mockMvc.perform(get("/api/v1/me").header("Authorization", "Basic " + basicUser))
+                .andExpect(status().isUnauthorized());
+
+        // HTTP Basic credentials "admin:admin" on protected endpoint returns 401
+        String basicAdmin = Base64.getEncoder().encodeToString("admin:admin".getBytes(StandardCharsets.UTF_8));
+        mockMvc.perform(get("/api/v1/me").header("Authorization", "Basic " + basicAdmin))
+                .andExpect(status().isUnauthorized());
+
+        // Verify UserDetailsService bean throws UsernameNotFoundException
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> userDetailsService.loadUserByUsername("user"))
+                .isInstanceOf(UsernameNotFoundException.class);
     }
 }

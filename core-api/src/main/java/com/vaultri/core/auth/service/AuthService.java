@@ -7,7 +7,7 @@ import com.vaultri.core.auth.entity.Seller;
 import com.vaultri.core.auth.exception.DuplicateEmailException;
 import com.vaultri.core.auth.repository.RefreshTokenRepository;
 import com.vaultri.core.auth.repository.SellerRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -17,17 +17,30 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class AuthService {
-
-    // Pre-computed BCrypt hash of a dummy password to perform constant-time comparison on nonexistent emails
-    private static final String DUMMY_HASH = "$2a$10$wK1c5xH2qfH1k7eU8W.Ptu0R5n/Fv1O5D6k8h1t3k7y2k5h8k9k2";
 
     private final SellerRepository sellerRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final JwtProperties jwtProperties;
+    private final String dummyHash;
+
+    public AuthService(
+            SellerRepository sellerRepository,
+            RefreshTokenRepository refreshTokenRepository,
+            PasswordEncoder passwordEncoder,
+            TokenService tokenService,
+            JwtProperties jwtProperties
+    ) {
+        this.sellerRepository = sellerRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.tokenService = tokenService;
+        this.jwtProperties = jwtProperties;
+        // Dynamically generate dummy BCrypt hash at startup using the injected PasswordEncoder bean
+        this.dummyHash = passwordEncoder.encode("dummy_timing_salt_" + UUID.randomUUID());
+    }
 
     /**
      * Registers a new seller account.
@@ -52,13 +65,17 @@ public class AuthService {
                 .updatedAt(Instant.now())
                 .build();
 
-        Seller saved = sellerRepository.save(seller);
-        return SellerResponse.from(saved);
+        try {
+            Seller saved = sellerRepository.saveAndFlush(seller);
+            return SellerResponse.from(saved);
+        } catch (DataIntegrityViolationException ex) {
+            throw new DuplicateEmailException(normalizedEmail);
+        }
     }
 
     /**
      * Authenticates a seller and issues an access token and refresh token.
-     * Performs constant-time password check via dummy hash when email is not found
+     * Performs constant-time password check via dynamic dummy hash when email is not found
      * to prevent user enumeration attacks via response timing.
      */
     @Transactional
@@ -67,8 +84,8 @@ public class AuthService {
         var sellerOpt = sellerRepository.findByEmailIgnoreCase(normalizedEmail);
 
         if (sellerOpt.isEmpty()) {
-            // Constant-time execution against dummy hash
-            passwordEncoder.matches(request.password(), DUMMY_HASH);
+            // Constant-time execution against dynamic dummy hash
+            passwordEncoder.matches(request.password(), dummyHash);
             throw new BadCredentialsException("Invalid email or password");
         }
 
@@ -82,24 +99,22 @@ public class AuthService {
 
     /**
      * Exchanges a valid refresh token for a newly rotated access token and refresh token.
-     * Reusing a revoked or expired token throws BadCredentialsException (HTTP 401).
+     * Uses atomic conditional update to ensure exactly one thread succeeds under concurrent requests.
      */
     @Transactional
     public AuthResponse refresh(RefreshTokenRequest request) {
         String rawToken = request.refreshToken().trim();
         String tokenHash = tokenService.hashToken(rawToken);
 
-        RefreshToken token = refreshTokenRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> new BadCredentialsException("Invalid or expired refresh token"));
-
         Instant now = Instant.now();
-        if (token.getRevokedAt() != null || token.getExpiresAt().isBefore(now)) {
+        // Atomic single conditional update: revoked_at is set if and only if it was null and unexpired
+        int updated = refreshTokenRepository.revokeIfActive(tokenHash, now);
+        if (updated != 1) {
             throw new BadCredentialsException("Invalid or expired refresh token");
         }
 
-        // Rotate: revoke the current token immediately upon exchange
-        token.setRevokedAt(now);
-        refreshTokenRepository.save(token);
+        RefreshToken token = refreshTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new BadCredentialsException("Invalid or expired refresh token"));
 
         return createAuthSession(token.getSeller());
     }

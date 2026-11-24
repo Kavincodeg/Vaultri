@@ -1,6 +1,7 @@
 package com.vaultri.core.deal.exception;
 
 import com.vaultri.core.auth.exception.DuplicateEmailException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -48,6 +49,17 @@ public class DealExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Duplicate Email");
         problem.setType(URI.create("https://vaultri.com/errors/duplicate-email"));
+        return problem;
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "Request conflicts with existing data"
+        );
+        problem.setTitle("Conflict");
+        problem.setType(URI.create("https://vaultri.com/errors/conflict"));
         return problem;
     }
 

@@ -54,6 +54,12 @@ vaultri:
     secret: ${JWT_SECRET:}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 management:
   endpoints:
     web:
