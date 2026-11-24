@@ -33,6 +33,10 @@ public class IdempotencyKey {
     @JoinColumn(name = "seller_id", nullable = false)
     private Seller seller;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deal_id")
+    private com.vaultri.core.deal.entity.Deal deal;
+
     @Column(name = "key", nullable = false)
     private String key;
 
@@ -49,6 +53,9 @@ public class IdempotencyKey {
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
 
     @Override
     public boolean equals(Object o) {

@@ -37,3 +37,8 @@ vaultri:
     refresh-token-ttl: 7d
   cancellation:
     fee-percent: 50
+  razorpay:
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+    base-url: ${RAZORPAY_BASE_URL:https://api.razorpay.com}

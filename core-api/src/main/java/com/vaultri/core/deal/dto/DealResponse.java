@@ -2,6 +2,8 @@ package com.vaultri.core.deal.dto;
 
 import com.vaultri.core.deal.entity.Deal;
 import com.vaultri.core.deal.entity.DealStatus;
+import com.vaultri.core.payment.dto.PaymentSummary;
+import com.vaultri.core.payment.entity.Payment;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -21,9 +23,14 @@ public record DealResponse(
         String contractText,
         Long version,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        PaymentSummary depositPayment
 ) {
     public static DealResponse from(Deal deal) {
+        return from(deal, null);
+    }
+
+    public static DealResponse from(Deal deal, Payment depositPayment) {
         return new DealResponse(
                 deal.getId(),
                 deal.getSeller().getId(),
@@ -39,7 +46,8 @@ public record DealResponse(
                 deal.getContractText(),
                 deal.getVersion(),
                 deal.getCreatedAt(),
-                deal.getUpdatedAt()
+                deal.getUpdatedAt(),
+                PaymentSummary.from(depositPayment)
         );
     }
 }

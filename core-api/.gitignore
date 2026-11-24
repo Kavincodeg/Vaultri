@@ -37,3 +37,4 @@ nbdist/
 ### Secrets & Local Env ###
 .env
 *.local
+build-output.txt

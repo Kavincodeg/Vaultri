@@ -29,6 +29,13 @@ security:
     secret: test_secret_key_needs_to_be_at_least_256_bits_for_hmac_sha256_testing_only
     expiration-ms: 3600000
 
+vaultri:
+  razorpay:
+    key-id: rzp_test_dummy_key_id
+    key-secret: rzp_test_dummy_key_secret
+    webhook-secret: test_webhook_secret_key_12345
+    base-url: https://api.razorpay.com
+
 management:
   endpoints:
     web:

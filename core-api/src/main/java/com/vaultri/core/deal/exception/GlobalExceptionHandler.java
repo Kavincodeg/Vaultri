@@ -1,9 +1,12 @@
 package com.vaultri.core.deal.exception;
 
 import com.vaultri.core.auth.exception.DuplicateEmailException;
+import com.vaultri.core.payment.exception.GatewayUnavailableException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -15,7 +18,7 @@ import java.net.URI;
  * Maps domain exceptions to RFC 7807 ProblemDetail HTTP responses.
  */
 @RestControllerAdvice
-public class DealExceptionHandler {
+public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalDealTransitionException.class)
     public ProblemDetail handleIllegalDealTransition(IllegalDealTransitionException ex) {
@@ -61,6 +64,19 @@ public class DealExceptionHandler {
         problem.setTitle("Conflict");
         problem.setType(URI.create("https://vaultri.com/errors/conflict"));
         return problem;
+    }
+
+    @ExceptionHandler(GatewayUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleGatewayUnavailable(GatewayUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_GATEWAY,
+                "Payment gateway is temporarily unavailable. Please retry with the same Idempotency-Key."
+        );
+        problem.setTitle("Gateway Unavailable");
+        problem.setType(URI.create("https://vaultri.com/errors/gateway-unavailable"));
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .header(HttpHeaders.RETRY_AFTER, "1")
+                .body(problem);
     }
 
     @ExceptionHandler(BadCredentialsException.class)

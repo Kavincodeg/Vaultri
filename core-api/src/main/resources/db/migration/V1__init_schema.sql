@@ -184,16 +184,19 @@ CREATE INDEX idx_webhook_events_unprocessed ON webhook_events (processed_at) WHE
 CREATE TABLE idempotency_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
+    deal_id UUID REFERENCES deals(id) ON DELETE CASCADE,
     key VARCHAR(255) NOT NULL,
     request_hash VARCHAR(255) NOT NULL,
     response_status INT,
     response_body JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    locked_until TIMESTAMPTZ,
     CONSTRAINT uq_idempotency_seller_key UNIQUE (seller_id, key)
 );
 
 -- Indexes foreign key to support cascading operations and seller-level idempotency key lookups
 CREATE INDEX idx_idempotency_keys_seller_id ON idempotency_keys (seller_id);
+CREATE INDEX idx_idempotency_keys_deal_id ON idempotency_keys (deal_id);
 
 -- ----------------------------------------------------------------------------
 -- 8. Reminders Table

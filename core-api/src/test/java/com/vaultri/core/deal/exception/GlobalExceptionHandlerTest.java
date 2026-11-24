@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class DealExceptionHandlerTest {
+class GlobalExceptionHandlerTest {
 
     private MockMvc mockMvc;
 
@@ -54,7 +54,7 @@ class DealExceptionHandlerTest {
     void setUp() {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new TestController())
-                .setControllerAdvice(new DealExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
 

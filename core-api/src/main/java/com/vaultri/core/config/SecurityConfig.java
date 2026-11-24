@@ -78,11 +78,8 @@ public class SecurityConfig {
                     ).permitAll();
                 }
 
-                // TODO: Payment webhook signature verification arrives in the payments step
-                auth.requestMatchers(
-                    "/api/v1/webhooks/**",
-                    "/webhooks/**"
-                ).permitAll();
+                // Razorpay payment webhook endpoint (publicly reachable, signature validated internally)
+                auth.requestMatchers(HttpMethod.POST, "/webhooks/razorpay").permitAll();
 
                 // All other endpoints require a validated JWT
                 auth.anyRequest().authenticated();

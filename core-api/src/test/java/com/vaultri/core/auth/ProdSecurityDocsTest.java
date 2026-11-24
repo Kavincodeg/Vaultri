@@ -26,7 +26,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "MAIL_HOST=localhost",
         "MAIL_USERNAME=dummy",
         "MAIL_PASSWORD=dummy",
-        "JWT_SECRET=test_secret_key_needs_to_be_at_least_256_bits_for_hmac_sha256_testing_only"
+        "JWT_SECRET=test_secret_key_needs_to_be_at_least_256_bits_for_hmac_sha256_testing_only",
+        "RAZORPAY_KEY_ID=rzp_live_test_key_id",
+        "RAZORPAY_KEY_SECRET=rzp_live_test_key_secret",
+        "RAZORPAY_WEBHOOK_SECRET=rzp_live_test_webhook_secret"
 })
 @ActiveProfiles(profiles = {"test", "prod"})
 @AutoConfigureMockMvc
