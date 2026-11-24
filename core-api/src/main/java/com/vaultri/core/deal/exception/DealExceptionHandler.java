@@ -1,14 +1,17 @@
 package com.vaultri.core.deal.exception;
 
+import com.vaultri.core.auth.exception.DuplicateEmailException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.net.URI;
 
 /**
- * Maps Deal domain exceptions to RFC 7807 ProblemDetail HTTP responses.
+ * Maps domain exceptions to RFC 7807 ProblemDetail HTTP responses.
  */
 @RestControllerAdvice
 public class DealExceptionHandler {
@@ -37,6 +40,34 @@ public class DealExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Invalid Cancellation Fee");
         problem.setType(URI.create("https://vaultri.com/errors/invalid-cancellation-fee"));
+        return problem;
+    }
+
+    @ExceptionHandler(DuplicateEmailException.class)
+    public ProblemDetail handleDuplicateEmail(DuplicateEmailException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Duplicate Email");
+        problem.setType(URI.create("https://vaultri.com/errors/duplicate-email"));
+        return problem;
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ProblemDetail handleBadCredentials(BadCredentialsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Authentication Failed");
+        problem.setType(URI.create("https://vaultri.com/errors/unauthorized"));
+        return problem;
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ProblemDetail handleValidationException(MethodArgumentNotValidException ex) {
+        String detail = ex.getBindingResult().getFieldErrors().stream()
+                .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                .reduce((a, b) -> a + "; " + b)
+                .orElse("Validation failed");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        problem.setTitle("Validation Error");
+        problem.setType(URI.create("https://vaultri.com/errors/validation-error"));
         return problem;
     }
 }

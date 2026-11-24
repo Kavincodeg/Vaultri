@@ -1,48 +1,127 @@
 package com.vaultri.core.config;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.JWK;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.OctetSequenceKey;
+import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.vaultri.core.auth.config.JwtProperties;
+import com.vaultri.core.auth.security.SecurityProblemSupport;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtProperties jwtProperties;
+    private final SecurityProblemSupport securityProblemSupport;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // TODO: /webhooks/razorpay must be public but signature-verified via X-Razorpay-Signature HMAC-SHA256, with CSRF disabled for it only.
         http
-            .csrf(csrf -> csrf
-                .ignoringRequestMatchers(
-                    "/api/v1/webhooks/**",
-                    "/webhooks/**"
-                )
-            )
+            // CSRF is disabled because authentication relies on stateless Bearer JWTs
+            .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> {})
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(securityProblemSupport)
+                .accessDeniedHandler(securityProblemSupport)
+            )
             .authorizeHttpRequests(auth -> auth
-                // Actuator Health and Info
+                // Public authentication endpoints
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
+
+                // Health checks and actuator metrics
                 .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                // Dedicated API Health Endpoint
                 .requestMatchers("/api/v1/health", "/api/v1/health/**").permitAll()
-                // Swagger / OpenAPI documentation
+
+                // OpenAPI / Swagger UI
                 .requestMatchers(
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
                     "/swagger-ui.html"
                 ).permitAll()
-                // Webhook endpoints (signature verified at application/filter layer)
+
+                // TODO: Payment webhook signature verification arrives in the payments step
                 .requestMatchers(
                     "/api/v1/webhooks/**",
                     "/webhooks/**"
                 ).permitAll()
-                // All other business endpoints require authentication
+
+                // All other endpoints require a validated JWT
                 .anyRequest().authenticated()
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.decoder(jwtDecoder()))
+                .authenticationEntryPoint(securityProblemSupport)
+                .accessDeniedHandler(securityProblemSupport)
             );
 
         return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * Prevents Spring Boot from generating a random default user/password in logs.
+     */
+    @Bean
+    public UserDetailsService userDetailsService() {
+        return username -> {
+            throw new UsernameNotFoundException("Stateless JWT authentication in use; UserDetailsService disabled");
+        };
+    }
+
+    @Bean
+    public JwtEncoder jwtEncoder() {
+        SecretKey key = new SecretKeySpec(
+                jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256"
+        );
+        JWK jwk = new OctetSequenceKey.Builder(key)
+                .algorithm(JWSAlgorithm.HS256)
+                .build();
+        JWKSource<SecurityContext> jwkSource = new ImmutableJWKSet<>(new JWKSet(jwk));
+        return new NimbusJwtEncoder(jwkSource);
+    }
+
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        SecretKey key = new SecretKeySpec(
+                jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256"
+        );
+        return NimbusJwtDecoder.withSecretKey(key)
+                .macAlgorithm(MacAlgorithm.HS256)
+                .build();
     }
 }

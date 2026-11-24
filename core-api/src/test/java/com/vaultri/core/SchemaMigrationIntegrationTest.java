@@ -44,10 +44,10 @@ class SchemaMigrationIntegrationTest extends AbstractIntegrationTest {
     void testFlywayMigrationsApplied() {
         Integer tableCount = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN " +
-                "('sellers', 'deals', 'payments', 'reminders', 'audit_logs', 'ledger_entries', 'webhook_events', 'idempotency_keys')",
+                "('sellers', 'deals', 'payments', 'reminders', 'audit_logs', 'ledger_entries', 'webhook_events', 'idempotency_keys', 'refresh_tokens')",
                 Integer.class
         );
-        assertThat(tableCount).isEqualTo(8);
+        assertThat(tableCount).isEqualTo(9);
     }
 
     @Test

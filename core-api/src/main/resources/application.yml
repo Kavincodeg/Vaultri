@@ -28,3 +28,12 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
     tags-sorter: alpha
+
+vaultri:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-jwt-secret-do-not-use-in-production-min-32-bytes!}
+    issuer: vaultri-core-api
+    access-token-ttl: 15m
+    refresh-token-ttl: 7d
+  cancellation:
+    fee-percent: 50

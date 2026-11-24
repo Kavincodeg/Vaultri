@@ -216,3 +216,18 @@ CREATE INDEX idx_reminders_deal_id ON reminders (deal_id);
 -- Optimizes background scheduler queries that poll for due pending reminders to dispatch
 CREATE INDEX idx_reminders_status_due_at ON reminders (status, due_at);
 
+-- ----------------------------------------------------------------------------
+-- 9. Refresh Tokens Table
+-- ----------------------------------------------------------------------------
+CREATE TABLE refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Indexes foreign key to optimize queries finding or revoking active refresh tokens for a seller
+CREATE INDEX idx_refresh_tokens_seller_id ON refresh_tokens (seller_id);
+

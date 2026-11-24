@@ -161,6 +161,14 @@ public class DealService {
     }
 
     /**
+     * Retrieves a deal scoped strictly to the authenticated seller.
+     */
+    @Transactional(readOnly = true)
+    public Deal getDeal(UUID sellerId, UUID dealId) {
+        return loadDeal(dealId, sellerId);
+    }
+
+    /**
      * Helper to load deals ONLY by id AND sellerId, guaranteeing cross-seller isolation.
      */
     private Deal loadDeal(UUID dealId, UUID sellerId) {

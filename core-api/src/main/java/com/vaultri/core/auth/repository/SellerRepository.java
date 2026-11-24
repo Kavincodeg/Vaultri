@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface SellerRepository extends JpaRepository<Seller, UUID> {
     Optional<Seller> findByEmailIgnoreCase(String email);
+    boolean existsByEmailIgnoreCase(String email);
 }
