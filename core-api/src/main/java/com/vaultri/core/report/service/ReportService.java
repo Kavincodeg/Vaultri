@@ -1,6 +1,6 @@
 package com.vaultri.core.report.service;
 
-import com.vaultri.core.report.repository.ReportRepository;
+import com.vaultri.core.deal.repository.DealRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -8,5 +8,5 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ReportService {
 
-    private final ReportRepository reportRepository;
+    private final DealRepository dealRepository;
 }
