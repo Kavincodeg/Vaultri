@@ -1,0 +1,45 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  # Datasource properties are dynamically provided by @ServiceConnection with Testcontainers PostgreSQL
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+
+  # Flyway is enabled in tests so real migrations run against PostgreSQL Testcontainer
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+  mail:
+    host: localhost
+    port: 1025
+
+security:
+  jwt:
+    secret: test_secret_key_needs_to_be_at_least_256_bits_for_hmac_sha256_testing_only
+    expiration-ms: 3600000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  health:
+    redis:
+      enabled: false
+    mail:
+      enabled: false

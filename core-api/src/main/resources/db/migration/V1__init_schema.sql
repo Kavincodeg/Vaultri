@@ -1,0 +1,2 @@
+-- V1__init_schema.sql
+-- Placeholder migration to be replaced in subsequent setup step.

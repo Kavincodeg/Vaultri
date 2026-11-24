@@ -3,8 +3,10 @@ name: CI / Deploy
 on:
   push:
     branches: [main]
+    paths-ignore: ['core-api/**', 'docs/**', '.github/workflows/core-api-ci.yml']
   pull_request:
     branches: [main]
+    paths-ignore: ['core-api/**', 'docs/**', '.github/workflows/core-api-ci.yml']
 
 jobs:
   build:

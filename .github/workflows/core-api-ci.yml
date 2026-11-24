@@ -1,0 +1,51 @@
+name: Core API CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'core-api/**'
+      - '.github/workflows/core-api-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'core-api/**'
+      - '.github/workflows/core-api-ci.yml'
+
+jobs:
+  build:
+    name: Build & Test Core API (Java 21)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: core-api
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.12.1'
+
+      - name: Grant Execute Permission for Gradle Wrapper
+        run: chmod +x gradlew
+
+      - name: Build and Test with Gradle
+        run: ./gradlew clean build --info
+
+      - name: Upload JaCoCo Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-api-jacoco-report
+          path: core-api/build/reports/jacoco/test/html/
+          if-no-files-found: ignore
