@@ -56,6 +56,14 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(com.vaultri.core.report.exception.InvalidDateRangeException.class)
+    public ProblemDetail handleInvalidDateRange(com.vaultri.core.report.exception.InvalidDateRangeException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Invalid Date Range");
+        problem.setType(URI.create("https://vaultri.com/errors/invalid-date-range"));
+        return problem;
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
