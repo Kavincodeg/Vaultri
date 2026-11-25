@@ -11,7 +11,9 @@ import com.vaultri.core.deal.dto.CancelDealRequest;
 import com.vaultri.core.deal.dto.CreateDealRequest;
 import com.vaultri.core.deal.entity.Deal;
 import com.vaultri.core.deal.entity.DealStatus;
+import com.vaultri.core.deal.exception.IllegalDealTransitionException;
 import com.vaultri.core.deal.repository.DealRepository;
+import com.vaultri.core.deal.service.DealService;
 import com.vaultri.core.payment.config.RazorpayProperties;
 import com.vaultri.core.payment.entity.Payment;
 import com.vaultri.core.payment.entity.PaymentStatus;
@@ -29,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -41,6 +44,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -78,6 +82,9 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private RazorpayProperties razorpayProperties;
+
+    @Autowired
+    private DealService dealService;
 
     private String tokenA;
     private String tokenB;
@@ -500,6 +507,59 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("Deterministic ordering (a): complete() first, then cancel(fee 0) returns 409 and deal stays COMPLETED")
+    void testCompleteFirstThenCancelReturns409() throws Exception {
+        Deal deal = createDealForSeller(tokenA, 100000L, 20);
+        UUID dealId = deal.getId();
+        deal.setStatus(DealStatus.IN_PROGRESS);
+        dealRepository.save(deal);
+
+        // 1. complete() first
+        Deal completed = dealService.complete(dealId, sellerA.getId());
+        assertThat(completed.getStatus()).isEqualTo(DealStatus.COMPLETED);
+
+        // 2. then cancel(fee 0) returns 409
+        mockMvc.perform(post("/api/v1/deals/" + dealId + "/cancel")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CancelDealRequest(0L, "Cancel after complete"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Illegal Deal Transition"));
+
+        // 3. deal stays COMPLETED
+        Deal finalDeal = dealRepository.findById(dealId).orElseThrow();
+        assertThat(finalDeal.getStatus()).isEqualTo(DealStatus.COMPLETED);
+    }
+
+    @Test
+    @DisplayName("Deterministic ordering (b): cancel(fee 0) first, then complete() returns 409 and deal stays CANCELLED")
+    void testCancelFirstThenCompleteReturns409() throws Exception {
+        Deal deal = createDealForSeller(tokenA, 100000L, 20);
+        UUID dealId = deal.getId();
+        deal.setStatus(DealStatus.IN_PROGRESS);
+        dealRepository.save(deal);
+
+        // 1. cancel(fee 0) first
+        mockMvc.perform(post("/api/v1/deals/" + dealId + "/cancel")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CancelDealRequest(0L, "Cancel before complete"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        // 2. then complete() returns 409 (IllegalDealTransitionException)
+        assertThatThrownBy(() -> dealService.complete(dealId, sellerA.getId()))
+                .isInstanceOf(IllegalDealTransitionException.class)
+                .hasMessageContaining("from CANCELLED to COMPLETED");
+
+        // 3. deal stays CANCELLED
+        Deal finalDeal = dealRepository.findById(dealId).orElseThrow();
+        assertThat(finalDeal.getStatus()).isEqualTo(DealStatus.CANCELLED);
+    }
+
+    @Test
     @DisplayName("20 rounds racing cancel (fee 0) against complete() on an IN_PROGRESS deal: exactly one wins, other gets 409, no 500")
     void testCancelVsCompleteRace20Rounds() throws Exception {
         AtomicInteger cancelWins = new AtomicInteger(0);
@@ -518,10 +578,17 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
             AtomicInteger cancelStatus = new AtomicInteger(0);
             AtomicInteger completeStatus = new AtomicInteger(0);
 
+            // Give one of the two threads a small random start delay (0 to 3 ms) in each round
+            int delayMs = ThreadLocalRandom.current().nextInt(4); // 0 to 3 ms
+            boolean delayCancel = ThreadLocalRandom.current().nextBoolean();
+
             executor.submit(() -> {
                 readyLatch.countDown();
                 try {
                     startLatch.await();
+                    if (delayCancel && delayMs > 0) {
+                        Thread.sleep(delayMs);
+                    }
                     int st = mockMvc.perform(post("/api/v1/deals/" + dealId + "/cancel")
                                     .header("Authorization", "Bearer " + tokenA)
                                     .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -529,29 +596,26 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
                                     .content(objectMapper.writeValueAsString(new CancelDealRequest(0L, "Race cancel"))))
                             .andReturn().getResponse().getStatus();
                     cancelStatus.set(st);
-                } catch (Exception ignored) {}
+                } catch (Exception ex) {
+                    cancelStatus.set(409);
+                }
             });
 
             executor.submit(() -> {
                 readyLatch.countDown();
                 try {
                     startLatch.await();
-                    // Call complete via dealService directly or via endpoint
-                    dealRepository.findById(dealId).ifPresent(d -> {
-                        try {
-                            // Directly invoke state transition or complete
-                            Deal loaded = dealRepository.findById(dealId).orElseThrow();
-                            if (loaded.getStatus() == DealStatus.IN_PROGRESS) {
-                                loaded.setStatus(DealStatus.COMPLETED);
-                                dealRepository.saveAndFlush(loaded);
-                                completeStatus.set(200);
-                            } else {
-                                completeStatus.set(409);
-                            }
-                        } catch (Exception ex) {
-                            completeStatus.set(409);
-                        }
-                    });
+                    if (!delayCancel && delayMs > 0) {
+                        Thread.sleep(delayMs);
+                    }
+                    try {
+                        dealService.complete(dealId, sellerA.getId());
+                        completeStatus.set(200);
+                    } catch (IllegalDealTransitionException | ObjectOptimisticLockingFailureException ex) {
+                        completeStatus.set(409);
+                    } catch (Exception ex) {
+                        completeStatus.set(500);
+                    }
                 } catch (Exception ignored) {}
             });
 
@@ -560,11 +624,18 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
             executor.shutdown();
             executor.awaitTermination(5, TimeUnit.SECONDS);
 
+            // Invariants: No 500s, exactly one winner
+            assertThat(cancelStatus.get()).isIn(200, 409);
+            assertThat(completeStatus.get()).isIn(200, 409);
+            assertThat(cancelStatus.get() == 200 ^ completeStatus.get() == 200).isTrue();
+
             Deal finalDeal = dealRepository.findById(dealId).orElseThrow();
             assertThat(finalDeal.getStatus()).isIn(DealStatus.CANCELLED, DealStatus.COMPLETED);
             if (finalDeal.getStatus() == DealStatus.CANCELLED) {
+                assertThat(cancelStatus.get()).isEqualTo(200);
                 cancelWins.incrementAndGet();
             } else {
+                assertThat(completeStatus.get()).isEqualTo(200);
                 completeWins.incrementAndGet();
             }
         }

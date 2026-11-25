@@ -7,6 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -77,6 +78,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .header(HttpHeaders.RETRY_AFTER, "1")
                 .body(problem);
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail handleOptimisticLocking(ObjectOptimisticLockingFailureException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Deal was modified concurrently");
+        problem.setTitle("Concurrent Modification");
+        problem.setType(URI.create("https://vaultri.com/errors/concurrent-modification"));
+        return problem;
     }
 
     @ExceptionHandler(BadCredentialsException.class)
