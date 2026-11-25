@@ -39,6 +39,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-jooq")
 
+    // ShedLock for distributed task scheduling
+    implementation("net.javacrumbs.shedlock:shedlock-spring:6.2.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.2.0")
+
     // Database & Migrations (PostgreSQL exclusively)
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.flywaydb:flyway-core")

@@ -222,8 +222,8 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(wrongPassJson.get("status").asInt()).isEqualTo(401);
         assertThat(unknownEmailJson.get("status").asInt()).isEqualTo(401);
-        assertThat(wrongPassJson.get("detail").asText()).isEqualTo("Invalid email or password");
-        assertThat(unknownEmailJson.get("detail").asText()).isEqualTo("Invalid email or password");
+        assertThat(wrongPassJson.get("detail").asText()).isEqualTo("Authentication required");
+        assertThat(unknownEmailJson.get("detail").asText()).isEqualTo("Authentication required");
         assertThat(wrongPassJson.get("title").asText()).isEqualTo("Authentication Failed");
         assertThat(unknownEmailJson.get("title").asText()).isEqualTo("Authentication Failed");
     }

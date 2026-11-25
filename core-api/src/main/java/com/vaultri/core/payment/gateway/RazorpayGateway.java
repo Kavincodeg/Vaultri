@@ -82,4 +82,34 @@ public class RazorpayGateway implements PaymentGateway {
             throw new GatewayUnavailableException("Payment gateway communication failed", e);
         }
     }
+
+    @Override
+    public void cancelPaymentLink(String linkId) {
+        if (linkId == null || linkId.isBlank()) {
+            return;
+        }
+
+        String credentials = properties.getKeyId() + ":" + properties.getKeySecret();
+        String basicAuth = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+
+        try {
+            restClient.post()
+                    .uri("/v1/payment_links/{id}/cancel", linkId)
+                    .header(HttpHeaders.AUTHORIZATION, basicAuth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body("{}")
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (org.springframework.web.client.HttpClientErrorException.BadRequest ex) {
+            // If 400 means already cancelled, expired or paid, treat as benign ALREADY_TERMINAL
+            String responseBody = ex.getResponseBodyAsString().toLowerCase();
+            if (responseBody.contains("cancelled") || responseBody.contains("expired") || responseBody.contains("paid") || responseBody.contains("terminal")) {
+                return; // Benign ALREADY_TERMINAL
+            }
+            throw new GatewayUnavailableException("Payment gateway cancellation failed with 400", ex);
+        } catch (Exception e) {
+            // Map I/O errors, timeouts, 5xx to GatewayUnavailableException without leaking secrets
+            throw new GatewayUnavailableException("Payment gateway communication failed", e);
+        }
+    }
 }

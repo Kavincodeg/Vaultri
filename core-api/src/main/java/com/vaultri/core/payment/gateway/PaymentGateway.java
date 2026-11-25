@@ -5,4 +5,6 @@ import com.vaultri.core.payment.gateway.dto.PaymentLinkResponse;
 
 public interface PaymentGateway {
     PaymentLinkResponse createPaymentLink(CreateLinkRequest request);
+
+    void cancelPaymentLink(String linkId);
 }

@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,7 +37,9 @@ public class DealController {
 
     private final DealService dealService;
     private final DealCreationService dealCreationService;
+    private final com.vaultri.core.deal.service.DealCancellationService dealCancellationService;
     private final PaymentRepository paymentRepository;
+    private final com.vaultri.core.reminder.repository.ReminderRepository reminderRepository;
 
     @PostMapping
     @Operation(summary = "Create deal", description = "Creates a deal draft with a deposit payment link (idempotent)")
@@ -63,6 +66,61 @@ public class DealController {
     public ResponseEntity<DealResponse> getDeal(@PathVariable UUID id, @CurrentSeller UUID sellerId) {
         Deal deal = dealService.getDeal(sellerId, id);
         Optional<Payment> depositPayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.DEPOSIT);
-        return ResponseEntity.ok(DealResponse.from(deal, depositPayment.orElse(null)));
+        Optional<Payment> cancellationFeePayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.CANCELLATION_FEE);
+        return ResponseEntity.ok(DealResponse.from(deal, depositPayment.orElse(null), cancellationFeePayment.orElse(null)));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @Operation(summary = "Cancel deal", description = "Cancels an active deal with an optional cancellation fee payment link (idempotent)")
+    public ResponseEntity<?> cancelDeal(
+            @PathVariable UUID id,
+            @CurrentSeller UUID sellerId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody com.vaultri.core.deal.dto.CancelDealRequest request
+    ) {
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.trim().length() > 255) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.BAD_REQUEST,
+                    "Idempotency-Key header is required and must be between 1 and 255 characters"
+            );
+            problem.setTitle("Bad Request");
+            problem.setType(URI.create("https://vaultri.com/errors/missing-idempotency-key"));
+            return ResponseEntity.badRequest().body(problem);
+        }
+
+        return dealCancellationService.cancelDeal(sellerId, id, idempotencyKey.trim(), request);
+    }
+
+    @PostMapping("/{id}/reminders")
+    @Operation(summary = "Create manual reminder", description = "Creates a PENDING reminder due now for an active deal")
+    public ResponseEntity<?> createManualReminder(
+            @PathVariable UUID id,
+            @CurrentSeller UUID sellerId
+    ) {
+        Deal deal = dealService.getDeal(sellerId, id);
+
+        Optional<com.vaultri.core.reminder.entity.Reminder> existingPending =
+                reminderRepository.findByDealIdAndStatus(deal.getId(), com.vaultri.core.reminder.entity.ReminderStatus.PENDING);
+        if (existingPending.isPresent()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.CONFLICT,
+                    "A pending reminder already exists for this deal"
+            );
+            problem.setTitle("Conflict");
+            problem.setType(URI.create("https://vaultri.com/errors/conflict"));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        }
+
+        com.vaultri.core.reminder.entity.Reminder reminder = com.vaultri.core.reminder.entity.Reminder.builder()
+                .deal(deal)
+                .channel("EMAIL")
+                .status(com.vaultri.core.reminder.entity.ReminderStatus.PENDING)
+                .dueAt(Instant.now())
+                .attempts(0)
+                .createdAt(Instant.now())
+                .build();
+        reminderRepository.save(reminder);
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 }

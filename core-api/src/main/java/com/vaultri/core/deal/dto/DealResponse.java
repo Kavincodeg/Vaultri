@@ -24,13 +24,18 @@ public record DealResponse(
         Long version,
         Instant createdAt,
         Instant updatedAt,
-        PaymentSummary depositPayment
+        PaymentSummary depositPayment,
+        PaymentSummary cancellationFeePayment
 ) {
     public static DealResponse from(Deal deal) {
-        return from(deal, null);
+        return from(deal, null, null);
     }
 
     public static DealResponse from(Deal deal, Payment depositPayment) {
+        return from(deal, depositPayment, null);
+    }
+
+    public static DealResponse from(Deal deal, Payment depositPayment, Payment cancellationFeePayment) {
         return new DealResponse(
                 deal.getId(),
                 deal.getSeller().getId(),
@@ -47,7 +52,8 @@ public record DealResponse(
                 deal.getVersion(),
                 deal.getCreatedAt(),
                 deal.getUpdatedAt(),
-                PaymentSummary.from(depositPayment)
+                PaymentSummary.from(depositPayment),
+                PaymentSummary.from(cancellationFeePayment)
         );
     }
 }

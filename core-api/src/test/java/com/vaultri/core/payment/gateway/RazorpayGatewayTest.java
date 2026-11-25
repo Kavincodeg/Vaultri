@@ -133,4 +133,63 @@ class RazorpayGatewayTest {
                 .hasMessageNotContaining("rzp_test_secret456")
                 .hasMessageNotContaining("Authorization");
     }
+
+    @Test
+    @DisplayName("cancelPaymentLink: sends correct URL, Basic Auth, empty JSON body, and succeeds")
+    void testCancelPaymentLinkSuccess() {
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_12345/cancel"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", org.hamcrest.Matchers.startsWith("Basic ")))
+                .andExpect(content().string("{}"))
+                .andRespond(withSuccess("{\"id\":\"plink_12345\",\"status\":\"cancelled\"}", MediaType.APPLICATION_JSON));
+
+        razorpayGateway.cancelPaymentLink("plink_12345");
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("cancelPaymentLink: 400 with terminal indicator (e.g. cancelled/expired/paid) is treated as benign ALREADY_TERMINAL")
+    void testCancelPaymentLinkBenign400() {
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_already_cancelled/cancel"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Payment link is already cancelled\"}}"));
+
+        razorpayGateway.cancelPaymentLink("plink_already_cancelled");
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("cancelPaymentLink: 400 without terminal indicator throws GatewayUnavailableException without credential leakage")
+    void testCancelPaymentLinkNonTerminal400() {
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_bad/cancel"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Invalid request parameter\"}}"));
+
+        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_bad"))
+                .isInstanceOf(GatewayUnavailableException.class)
+                .hasMessageNotContaining("rzp_test_secret456")
+                .hasMessageNotContaining("Authorization");
+    }
+
+    @Test
+    @DisplayName("cancelPaymentLink: 5xx server error throws GatewayUnavailableException without credential leakage")
+    void testCancelPaymentLink5xxError() {
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_server_err/cancel"))
+                .andRespond(withServerError().body("Gateway Error"));
+
+        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_server_err"))
+                .isInstanceOf(GatewayUnavailableException.class)
+                .hasMessageNotContaining("rzp_test_secret456")
+                .hasMessageNotContaining("Authorization");
+    }
+
+    @Test
+    @DisplayName("cancelPaymentLink: timeout throws GatewayUnavailableException without credential leakage")
+    void testCancelPaymentLinkTimeout() {
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_timeout/cancel"))
+                .andRespond(withException(new SocketTimeoutException("Connection timed out")));
+
+        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_timeout"))
+                .isInstanceOf(GatewayUnavailableException.class)
+                .hasMessageNotContaining("rzp_test_secret456")
+                .hasMessageNotContaining("Authorization");
+    }
 }

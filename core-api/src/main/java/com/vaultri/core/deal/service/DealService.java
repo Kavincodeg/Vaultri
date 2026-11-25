@@ -34,6 +34,7 @@ public class DealService {
     private final SellerRepository sellerRepository;
     private final AuditService auditService;
     private final CancellationFeePolicy cancellationFeePolicy;
+    private final com.vaultri.core.reminder.repository.ReminderRepository reminderRepository;
 
     /**
      * Creates a new draft deal for the given seller.
@@ -89,6 +90,25 @@ public class DealService {
         deal.setStatus(DealStatus.DEPOSIT_PENDING);
         Deal saved = dealRepository.save(deal);
         auditService.logAction(saved, "DEPOSIT_PENDING", "Deposit payment link generated/pending");
+
+        // When a deal moves to DEPOSIT_PENDING and has a due date, create ONE reminder (channel EMAIL, PENDING)
+        // with due_at = dueDate minus 3 days, or now() + 1 hour if that is already in the past.
+        if (saved.getDueDate() != null) {
+            java.time.Instant now = java.time.Instant.now();
+            java.time.Instant targetDue = saved.getDueDate().minus(3, java.time.temporal.ChronoUnit.DAYS);
+            java.time.Instant dueAt = targetDue.isBefore(now) ? now.plus(1, java.time.temporal.ChronoUnit.HOURS) : targetDue;
+
+            com.vaultri.core.reminder.entity.Reminder reminder = com.vaultri.core.reminder.entity.Reminder.builder()
+                    .deal(saved)
+                    .channel("EMAIL")
+                    .status(com.vaultri.core.reminder.entity.ReminderStatus.PENDING)
+                    .dueAt(dueAt)
+                    .attempts(0)
+                    .createdAt(now)
+                    .build();
+            reminderRepository.save(reminder);
+        }
+
         return saved;
     }
 
@@ -130,6 +150,7 @@ public class DealService {
 
         deal.setStatus(DealStatus.COMPLETED);
         Deal saved = dealRepository.save(deal);
+        reminderRepository.cancelPendingByDealId(saved.getId());
         auditService.logAction(saved, "COMPLETED", "Deal marked as completed");
         return saved;
     }
@@ -146,6 +167,7 @@ public class DealService {
 
         deal.setStatus(DealStatus.CANCELLED);
         Deal saved = dealRepository.save(deal);
+        reminderRepository.cancelPendingByDealId(saved.getId());
 
         String detail = "Deal cancelled with cancellation fee " + cancellationFee + " paise";
         auditService.logAction(saved, "CANCELLED", detail);

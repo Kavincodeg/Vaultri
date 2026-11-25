@@ -81,6 +81,8 @@ CREATE TABLE payments (
     razorpay_link_id VARCHAR(255) UNIQUE,
     razorpay_payment_id VARCHAR(255) UNIQUE,
     short_url TEXT,
+    cancel_requested_at TIMESTAMPTZ,
+    cancel_attempts INT NOT NULL DEFAULT 0 CHECK (cancel_attempts >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chk_payments_paid_requires_payment_id CHECK (
@@ -206,7 +208,7 @@ CREATE TABLE reminders (
     deal_id UUID NOT NULL REFERENCES deals(id) ON DELETE RESTRICT,
     channel VARCHAR(32) NOT NULL,
     message TEXT,
-    status VARCHAR(32) NOT NULL CHECK (status IN ('PENDING', 'SENT', 'FAILED')),
+    status VARCHAR(32) NOT NULL CHECK (status IN ('PENDING', 'SENT', 'FAILED', 'CANCELLED')),
     attempts INT NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     due_at TIMESTAMPTZ NOT NULL,
     sent_at TIMESTAMPTZ,
@@ -233,4 +235,14 @@ CREATE TABLE refresh_tokens (
 
 -- Indexes foreign key to optimize queries finding or revoking active refresh tokens for a seller
 CREATE INDEX idx_refresh_tokens_seller_id ON refresh_tokens (seller_id);
+
+-- ----------------------------------------------------------------------------
+-- 10. ShedLock Table
+-- ----------------------------------------------------------------------------
+CREATE TABLE shedlock (
+    name VARCHAR(64) PRIMARY KEY,
+    lock_until TIMESTAMPTZ NOT NULL,
+    locked_at TIMESTAMPTZ NOT NULL,
+    locked_by VARCHAR(255) NOT NULL
+);
 

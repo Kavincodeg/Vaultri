@@ -45,6 +45,9 @@ class DealServiceTest {
     @Mock
     private CancellationFeePolicy cancellationFeePolicy;
 
+    @Mock
+    private com.vaultri.core.reminder.repository.ReminderRepository reminderRepository;
+
     @InjectMocks
     private DealService dealService;
 

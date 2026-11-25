@@ -29,6 +29,15 @@ springdoc:
     operations-sorter: method
     tags-sorter: alpha
 
+logging:
+  level:
+    org:
+      hibernate:
+        engine:
+          jdbc:
+            spi:
+              SqlExceptionHelper: OFF
+
 vaultri:
   jwt:
     secret: ${JWT_SECRET:dev-only-jwt-secret-do-not-use-in-production-min-32-bytes!}
@@ -42,3 +51,9 @@ vaultri:
     key-secret: ${RAZORPAY_KEY_SECRET:}
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
     base-url: ${RAZORPAY_BASE_URL:https://api.razorpay.com}
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:noreply@vaultri.com}

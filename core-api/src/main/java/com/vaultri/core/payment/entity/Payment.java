@@ -50,6 +50,13 @@ public class Payment {
     @Column(name = "short_url", columnDefinition = "TEXT")
     private String shortUrl;
 
+    @Column(name = "cancel_requested_at")
+    private Instant cancelRequestedAt;
+
+    @Column(name = "cancel_attempts", nullable = false)
+    @Builder.Default
+    private Integer cancelAttempts = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

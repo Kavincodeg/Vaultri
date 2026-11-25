@@ -44,10 +44,10 @@ class SchemaMigrationIntegrationTest extends AbstractIntegrationTest {
     void testFlywayMigrationsApplied() {
         Integer tableCount = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN " +
-                "('sellers', 'deals', 'payments', 'reminders', 'audit_logs', 'ledger_entries', 'webhook_events', 'idempotency_keys', 'refresh_tokens')",
+                "('sellers', 'deals', 'payments', 'reminders', 'audit_logs', 'ledger_entries', 'webhook_events', 'idempotency_keys', 'refresh_tokens', 'shedlock')",
                 Integer.class
         );
-        assertThat(tableCount).isEqualTo(9);
+        assertThat(tableCount).isEqualTo(10);
     }
 
     @Test
@@ -450,5 +450,22 @@ class SchemaMigrationIntegrationTest extends AbstractIntegrationTest {
         );
         assertThat(newPaymentUpdated).isNotNull();
         assertThat(newPaymentUpdated).isAfter(initialPaymentUpdated);
+    }
+
+    @Test
+    @DisplayName("17. Reminders status check allows CANCELLED; shedlock table exists")
+    void testRemindersStatusAndShedlockTable() {
+        UUID reminderId = UUID.randomUUID();
+        int rows = jdbcTemplate.update(
+                "INSERT INTO reminders (id, deal_id, channel, status, due_at) VALUES (?, ?, ?, ?, now())",
+                reminderId, dealId, "EMAIL", "CANCELLED"
+        );
+        assertThat(rows).isEqualTo(1);
+
+        String shedlockCheck = jdbcTemplate.queryForObject(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'shedlock'",
+                String.class
+        );
+        assertThat(shedlockCheck).isEqualTo("shedlock");
     }
 }
