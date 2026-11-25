@@ -208,6 +208,7 @@ CREATE TABLE reminders (
     deal_id UUID NOT NULL REFERENCES deals(id) ON DELETE RESTRICT,
     channel VARCHAR(32) NOT NULL,
     message TEXT,
+    kind VARCHAR(16) NOT NULL DEFAULT 'SCHEDULED' CHECK (kind IN ('SCHEDULED','MANUAL')),
     status VARCHAR(32) NOT NULL CHECK (status IN ('PENDING', 'SENT', 'FAILED', 'CANCELLED')),
     attempts INT NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     due_at TIMESTAMPTZ NOT NULL,
@@ -220,6 +221,9 @@ CREATE INDEX idx_reminders_deal_id ON reminders (deal_id);
 
 -- Optimizes background scheduler queries that poll for due pending reminders to dispatch
 CREATE INDEX idx_reminders_status_due_at ON reminders (status, due_at);
+
+-- Enforces at most one PENDING MANUAL reminder per deal
+CREATE UNIQUE INDEX idx_reminders_pending_manual ON reminders (deal_id) WHERE kind = 'MANUAL' AND status = 'PENDING';
 
 -- ----------------------------------------------------------------------------
 -- 9. Refresh Tokens Table

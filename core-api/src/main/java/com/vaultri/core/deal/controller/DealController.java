@@ -9,6 +9,10 @@ import com.vaultri.core.deal.service.DealService;
 import com.vaultri.core.payment.entity.Payment;
 import com.vaultri.core.payment.entity.PaymentType;
 import com.vaultri.core.payment.repository.PaymentRepository;
+import com.vaultri.core.reminder.entity.Reminder;
+import com.vaultri.core.reminder.entity.ReminderKind;
+import com.vaultri.core.reminder.entity.ReminderStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -99,27 +103,39 @@ public class DealController {
     ) {
         Deal deal = dealService.getDeal(sellerId, id);
 
-        Optional<com.vaultri.core.reminder.entity.Reminder> existingPending =
-                reminderRepository.findByDealIdAndStatus(deal.getId(), com.vaultri.core.reminder.entity.ReminderStatus.PENDING);
+        Optional<Reminder> existingPending =
+                reminderRepository.findByDealIdAndKindAndStatus(deal.getId(), ReminderKind.MANUAL, ReminderStatus.PENDING);
         if (existingPending.isPresent()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.CONFLICT,
-                    "A pending reminder already exists for this deal"
+                    "A manual reminder is already pending for this deal"
             );
             problem.setTitle("Conflict");
             problem.setType(URI.create("https://vaultri.com/errors/conflict"));
             return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
         }
 
-        com.vaultri.core.reminder.entity.Reminder reminder = com.vaultri.core.reminder.entity.Reminder.builder()
+        Reminder reminder = Reminder.builder()
                 .deal(deal)
                 .channel("EMAIL")
-                .status(com.vaultri.core.reminder.entity.ReminderStatus.PENDING)
+                .kind(ReminderKind.MANUAL)
+                .status(ReminderStatus.PENDING)
                 .dueAt(Instant.now())
                 .attempts(0)
                 .createdAt(Instant.now())
                 .build();
-        reminderRepository.save(reminder);
+
+        try {
+            reminderRepository.saveAndFlush(reminder);
+        } catch (DataIntegrityViolationException ex) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.CONFLICT,
+                    "A manual reminder is already pending for this deal"
+            );
+            problem.setTitle("Conflict");
+            problem.setType(URI.create("https://vaultri.com/errors/conflict"));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        }
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }

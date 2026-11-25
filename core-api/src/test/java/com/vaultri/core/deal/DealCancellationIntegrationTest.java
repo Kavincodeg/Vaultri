@@ -425,8 +425,16 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
 
         retryJob.retryPendingLinkCancellations();
         Payment paymentExhausted = paymentRepository.findById(depositPayment.getId()).orElseThrow();
-        assertThat(paymentExhausted.getCancelRequestedAt()).isNull(); // Cleared flag
-        assertThat(auditRepository.findByDealId(dealId).stream().anyMatch(a -> a.getAction().equals("DEPOSIT_LINK_CANCEL_EXHAUSTED"))).isTrue();
+        assertThat(paymentExhausted.getCancelAttempts()).isEqualTo(10);
+        assertThat(paymentExhausted.getCancelRequestedAt()).isNotNull(); // Unresolved state remains visible
+        assertThat(auditRepository.findByDealId(dealId).stream().anyMatch(a -> a.getAction().equals("DEPOSIT_LINK_CANCEL_GAVE_UP"))).isTrue();
+
+        // Further runs do not retry exhausted payments
+        int previousCancelCalls = fakeGateway.getCancelCallCount();
+        retryJob.retryPendingLinkCancellations();
+        Payment paymentAfterFurtherRun = paymentRepository.findById(depositPayment.getId()).orElseThrow();
+        assertThat(paymentAfterFurtherRun.getCancelAttempts()).isEqualTo(10);
+        assertThat(fakeGateway.getCancelCallCount()).isEqualTo(previousCancelCalls);
 
         // Now test recovery scenario on a new deal:
         Deal deal2 = createDealForSeller(tokenA, 100000L, 20);

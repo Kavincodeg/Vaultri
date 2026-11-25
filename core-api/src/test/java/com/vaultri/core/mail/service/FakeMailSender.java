@@ -19,11 +19,16 @@ public class FakeMailSender implements MailSender {
     private final List<SentMail> sentMails = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger sendCallCount = new AtomicInteger(0);
     private volatile boolean shouldFail = false;
+    private volatile RuntimeException customExceptionToThrow = null;
     private final AtomicInteger remainingFailures = new AtomicInteger(0);
 
     @Override
     public void sendEmail(String to, String subject, String body) {
         sendCallCount.incrementAndGet();
+
+        if (customExceptionToThrow != null) {
+            throw customExceptionToThrow;
+        }
 
         if (shouldFail || remainingFailures.getAndDecrement() > 0) {
             throw new RuntimeException("Simulated SMTP dispatch failure");
@@ -44,7 +49,12 @@ public class FakeMailSender implements MailSender {
         sentMails.clear();
         sendCallCount.set(0);
         shouldFail = false;
+        customExceptionToThrow = null;
         remainingFailures.set(0);
+    }
+
+    public void setCustomExceptionToThrow(RuntimeException ex) {
+        this.customExceptionToThrow = ex;
     }
 
     public void setShouldFail(boolean fail) {

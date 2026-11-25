@@ -37,6 +37,11 @@ public class Reminder {
     private String message;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "kind", nullable = false, length = 16)
+    @Builder.Default
+    private ReminderKind kind = ReminderKind.SCHEDULED;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private ReminderStatus status;
 

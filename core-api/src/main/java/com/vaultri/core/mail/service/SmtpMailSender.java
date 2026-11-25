@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class JavaMailSenderImpl implements MailSender {
+public class SmtpMailSender implements MailSender {
 
     private final JavaMailSender javaMailSender;
     private final MailProperties mailProperties;
@@ -30,7 +30,8 @@ public class JavaMailSenderImpl implements MailSender {
         } catch (Exception e) {
             // Never log recipient addresses, subjects or bodies; log only exception class name
             log.error("Failed to send email via SMTP: {}", e.getClass().getSimpleName());
-            throw new RuntimeException("SMTP email dispatch failed", e);
+            // Throw exception without carrying original exception as cause to prevent recipient address leakage in stack traces
+            throw new RuntimeException("SMTP email dispatch failed");
         }
     }
 }

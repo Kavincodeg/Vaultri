@@ -82,7 +82,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ProblemDetail handleOptimisticLocking(ObjectOptimisticLockingFailureException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Deal was modified concurrently");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "The resource was modified concurrently. Please retry."
+        );
         problem.setTitle("Concurrent Modification");
         problem.setType(URI.create("https://vaultri.com/errors/concurrent-modification"));
         return problem;

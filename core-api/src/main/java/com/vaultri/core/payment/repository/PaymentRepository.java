@@ -40,6 +40,6 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     @Query("UPDATE Payment p SET p.cancelRequestedAt = :now, p.updatedAt = :now WHERE p.id = :id AND p.status = 'CREATED'")
     int setCancelRequestedAtIfCreated(@Param("id") UUID id, @Param("now") Instant now);
 
-    @Query("SELECT p FROM Payment p JOIN FETCH p.deal d JOIN FETCH d.seller WHERE p.cancelRequestedAt IS NOT NULL AND p.status = 'CREATED' ORDER BY p.cancelRequestedAt ASC")
+    @Query("SELECT p FROM Payment p JOIN FETCH p.deal d JOIN FETCH d.seller WHERE p.cancelRequestedAt IS NOT NULL AND p.status = 'CREATED' AND p.cancelAttempts < 10 ORDER BY p.cancelRequestedAt ASC")
     List<Payment> findPendingCancellations();
 }

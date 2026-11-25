@@ -101,9 +101,11 @@ public class RazorpayGateway implements PaymentGateway {
                     .retrieve()
                     .toBodilessEntity();
         } catch (org.springframework.web.client.HttpClientErrorException.BadRequest ex) {
-            // If 400 means already cancelled, expired or paid, treat as benign ALREADY_TERMINAL
+            // TODO: Benign-400 error text matching must be verified against real Razorpay test-mode API responses before launch.
+            // Currently treated conservatively: only explicit terminal indicators ("cancelled", "expired", "paid")
+            // are considered benign ALREADY_TERMINAL. Any unknown 400 body is treated as GatewayUnavailableException (triggering retry).
             String responseBody = ex.getResponseBodyAsString().toLowerCase();
-            if (responseBody.contains("cancelled") || responseBody.contains("expired") || responseBody.contains("paid") || responseBody.contains("terminal")) {
+            if (responseBody.contains("cancelled") || responseBody.contains("expired") || responseBody.contains("paid")) {
                 return; // Benign ALREADY_TERMINAL
             }
             throw new GatewayUnavailableException("Payment gateway cancellation failed with 400", ex);

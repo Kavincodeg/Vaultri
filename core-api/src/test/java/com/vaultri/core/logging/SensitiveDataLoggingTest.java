@@ -231,4 +231,64 @@ class SensitiveDataLoggingTest extends AbstractIntegrationTest {
         assertThat(logs).doesNotContain("+919444444444");
         assertThat(logs).doesNotContain("Free text secret customer reason");
     }
+
+    @Autowired
+    private com.vaultri.core.mail.service.FakeMailSender fakeMailSender;
+
+    @Autowired
+    private com.vaultri.core.reminder.service.ReminderDispatchService reminderDispatchService;
+
+    @Autowired
+    private com.vaultri.core.reminder.service.ReminderSchedulerService reminderSchedulerService;
+
+    @Autowired
+    private com.vaultri.core.reminder.repository.ReminderRepository reminderRepository;
+
+    @Test
+    @DisplayName("Log Capture: Mail failures with recipient in exception message or cause do not leak recipient address in logs")
+    void testMailFailureDoesNotLeakRecipientInLogs() throws Exception {
+        String sellerEmail = "seller_mail_leak_" + UUID.randomUUID() + "@vaultri.com";
+        mockMvc.perform(post("/api/v1/auth/signup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new SignupRequest(sellerEmail, "Password123!", "Seller", null))));
+
+        String token = objectMapper.readTree(
+                mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(sellerEmail, "Password123!"))))
+                        .andReturn().getResponse().getContentAsString()
+        ).path("accessToken").asText();
+
+        String secretRecipient = "cust_leak_" + UUID.randomUUID() + "@leaksensitivetest.com";
+        String createDealRes = mockMvc.perform(post("/api/v1/deals")
+                        .header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateDealRequest(
+                                "Cust", secretRecipient, null, "Mail Leak Test", 100000L, 20, Instant.now().plusSeconds(86400 * 5), null
+                        ))))
+                .andReturn().getResponse().getContentAsString();
+        UUID dealId = UUID.fromString(objectMapper.readTree(createDealRes).path("id").asText());
+
+        var rem = reminderRepository.findByDealId(dealId).get(0);
+        rem.setDueAt(Instant.now().minusSeconds(60));
+        reminderRepository.save(rem);
+
+        // Configure FakeMailSender to throw an exception whose message and nested cause contain secretRecipient
+        Throwable cause = new IllegalArgumentException("Nested SMTP cause containing " + secretRecipient);
+        fakeMailSender.setCustomExceptionToThrow(new RuntimeException("Mail delivery failed to " + secretRecipient, cause));
+
+        listAppender.list.clear();
+
+        // 1. Run direct dispatch
+        reminderDispatchService.claimAndDispatchOneReminder();
+
+        // 2. Run scheduled entry point
+        reminderSchedulerService.processDueReminders();
+
+        fakeMailSender.reset();
+
+        String capturedLogs = getCapturedLogs();
+        assertThat(capturedLogs).doesNotContain(secretRecipient);
+    }
 }

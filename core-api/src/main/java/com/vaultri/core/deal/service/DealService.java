@@ -101,6 +101,7 @@ public class DealService {
             com.vaultri.core.reminder.entity.Reminder reminder = com.vaultri.core.reminder.entity.Reminder.builder()
                     .deal(saved)
                     .channel("EMAIL")
+                    .kind(com.vaultri.core.reminder.entity.ReminderKind.SCHEDULED)
                     .status(com.vaultri.core.reminder.entity.ReminderStatus.PENDING)
                     .dueAt(dueAt)
                     .attempts(0)

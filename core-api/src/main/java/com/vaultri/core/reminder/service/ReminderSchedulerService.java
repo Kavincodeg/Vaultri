@@ -22,9 +22,14 @@ public class ReminderSchedulerService {
     @Scheduled(cron = "${vaultri.reminders.scheduler-cron:0 0 */12 * * *}")
     @SchedulerLock(name = "reminderSchedulerJob", lockAtMostFor = "10m")
     public void processDueReminders() {
-        List<UUID> dueIds = reminderRepository.findDueReminderIdsForUpdate(Instant.now(), 50);
-        for (UUID reminderId : dueIds) {
-            processSingleReminder(reminderId);
+        try {
+            int maxPerBatch = 50;
+            int count = 0;
+            while (count < maxPerBatch && reminderDispatchService.claimAndDispatchOneReminder()) {
+                count++;
+            }
+        } catch (Exception e) {
+            log.error("Unhandled error in scheduled reminder job: {}", e.getClass().getSimpleName());
         }
     }
 

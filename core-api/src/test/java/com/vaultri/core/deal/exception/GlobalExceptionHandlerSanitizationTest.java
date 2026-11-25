@@ -30,6 +30,15 @@ class GlobalExceptionHandlerSanitizationTest {
         public void throwSqlViolation() {
             throw new DataIntegrityViolationException("ERROR: duplicate key value violates unique constraint \"uq_seller_email\" Detail: Key (email)=(other_seller@test.com) already exists.");
         }
+
+        @GetMapping("/test/optimistic-locking")
+        public void throwOptimisticLocking() {
+            java.util.UUID dealId = java.util.UUID.randomUUID();
+            throw new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                    "Object of class [com.vaultri.core.deal.entity.Deal] with identifier [" + dealId + "]: optimistic locking failed",
+                    new Throwable()
+            );
+        }
     }
 
     private final MockMvc mockMvc = MockMvcBuilders
@@ -66,5 +75,20 @@ class GlobalExceptionHandlerSanitizationTest {
         assertThat(body).doesNotContain("uq_seller_email");
         assertThat(body).doesNotContain("SQL");
         assertThat(body).doesNotContain("StackTrace");
+    }
+
+    @Test
+    @DisplayName("ObjectOptimisticLockingFailureException returns fixed message and contains neither class name nor uuid")
+    void testOptimisticLockingSanitization() throws Exception {
+        MvcResult result = mockMvc.perform(get("/test/optimistic-locking").accept(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status", is(409)))
+                .andExpect(jsonPath("$.title", is("Concurrent Modification")))
+                .andExpect(jsonPath("$.detail", is("The resource was modified concurrently. Please retry.")))
+                .andReturn();
+
+        String body = result.getResponse().getContentAsString();
+        assertThat(body).doesNotContain("com.vaultri.core.deal.entity.Deal");
+        assertThat(body).doesNotContain("optimistic locking failed");
     }
 }
