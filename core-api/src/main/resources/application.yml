@@ -60,3 +60,6 @@ vaultri:
     connection-timeout: ${MAIL_SMTP_CONNECTIONTIMEOUT:5000}
     timeout: ${MAIL_SMTP_TIMEOUT:10000}
     write-timeout: ${MAIL_SMTP_WRITETIMEOUT:10000}
+  reminders:
+    scheduler-cron: ${REMINDERS_SCHEDULER_CRON:0 0 */12 * * *}
+    max-run-duration: ${REMINDERS_MAX_RUN_DURATION:5m}

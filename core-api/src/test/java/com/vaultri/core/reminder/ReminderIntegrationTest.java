@@ -469,4 +469,55 @@ class ReminderIntegrationTest extends AbstractIntegrationTest {
             lockOpt.get().unlock();
         }
     }
+
+    @Test
+    @DisplayName("Scheduler Time Budget: stops early when configured budget expires, unattempted stay PENDING, next run picks them up")
+    void testSchedulerTimeBudgetStopsEarly() throws Exception {
+        fakeMailSender.reset();
+        // Each email send sleeps 100ms
+        fakeMailSender.setSendSleepMs(100);
+
+        // Create 10 due reminders
+        java.util.List<UUID> reminderIds = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            UUID dId = createDealWithDueDate(tokenA, "budget_" + i + "@test.com", Instant.now().plusSeconds(86400 * 5));
+            Reminder r = reminderRepository.findByDealId(dId).get(0);
+            r.setDueAt(Instant.now().minusSeconds(100 + i));
+            reminderRepository.save(r);
+            reminderIds.add(r.getId());
+        }
+
+        // Configure budget to 250ms (allows ~2-3 sends before expiring)
+        reminderSchedulerService.setMaxRunDuration(java.time.Duration.ofMillis(250));
+
+        try {
+            // First run: should stop early due to budget
+            reminderSchedulerService.processDueReminders();
+
+            int sentFirstRun = fakeMailSender.getSentMails().size();
+            assertThat(sentFirstRun).isGreaterThanOrEqualTo(1);
+            assertThat(sentFirstRun).isLessThan(10);
+
+            // Reminders not yet attempted stay PENDING and unsent
+            long pendingCount = reminderRepository.findAllById(reminderIds).stream()
+                    .filter(r -> r.getStatus() == ReminderStatus.PENDING && r.getAttempts() == 0)
+                    .count();
+            assertThat(pendingCount).isEqualTo(10 - sentFirstRun);
+
+            // Increase budget or remove sleep so a following run picks up the remaining reminders
+            fakeMailSender.setSendSleepMs(0);
+            reminderSchedulerService.setMaxRunDuration(java.time.Duration.ofMinutes(5));
+
+            reminderSchedulerService.processDueReminders();
+
+            assertThat(fakeMailSender.getSentMails()).hasSize(10);
+            long allSentCount = reminderRepository.findAllById(reminderIds).stream()
+                    .filter(r -> r.getStatus() == ReminderStatus.SENT)
+                    .count();
+            assertThat(allSentCount).isEqualTo(10);
+        } finally {
+            fakeMailSender.setSendSleepMs(0);
+            reminderSchedulerService.setMaxRunDuration(java.time.Duration.ofMinutes(5));
+        }
+    }
 }

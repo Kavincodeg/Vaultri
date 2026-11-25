@@ -19,6 +19,12 @@ public class SmtpMailSender implements MailSender {
     private final JavaMailSender javaMailSender;
     private final MailProperties mailProperties;
 
+    /**
+     * Note on row lock duration during dispatch: read and write timeouts apply per individual socket
+     * operation. An SMTP send involves multiple sequential round-trip operations (EHLO, STARTTLS,
+     * AUTH, MAIL FROM, RCPT, DATA, QUIT), so the database row lock held during dispatch is held
+     * for a bounded but not tightly capped time, with no overall deadline.
+     */
     @PostConstruct
     public void configureSmtpTimeouts() {
         if (javaMailSender instanceof JavaMailSenderImpl impl) {
