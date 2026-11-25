@@ -28,9 +28,9 @@ public interface ReminderRepository extends JpaRepository<Reminder, UUID> {
     @Query("SELECT r FROM Reminder r JOIN FETCH r.deal d JOIN FETCH d.seller WHERE r.id = :id")
     Optional<Reminder> findByIdWithDealAndSeller(@Param("id") UUID id);
 
-    @Query(value = "SELECT id FROM reminders WHERE status = 'PENDING' AND due_at <= :now ORDER BY due_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED", nativeQuery = true)
+    @Query(value = "SELECT id FROM reminders WHERE status = 'PENDING' AND due_at <= :now AND (next_attempt_at IS NULL OR next_attempt_at <= :now) ORDER BY due_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED", nativeQuery = true)
     Optional<UUID> findNextDueReminderIdForUpdate(@Param("now") java.time.Instant now);
 
-    @Query(value = "SELECT id FROM reminders WHERE status = 'PENDING' AND due_at <= :now ORDER BY due_at ASC LIMIT :limit FOR UPDATE SKIP LOCKED", nativeQuery = true)
+    @Query(value = "SELECT id FROM reminders WHERE status = 'PENDING' AND due_at <= :now AND (next_attempt_at IS NULL OR next_attempt_at <= :now) ORDER BY due_at ASC LIMIT :limit FOR UPDATE SKIP LOCKED", nativeQuery = true)
     List<UUID> findDueReminderIdsForUpdate(@Param("now") java.time.Instant now, @Param("limit") int limit);
 }

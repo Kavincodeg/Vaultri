@@ -178,7 +178,7 @@ class ReminderIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Reminders Failure: failing mail sender increments attempts, FAILED after 3 attempts")
+    @DisplayName("Reminders Failure: failing mail sender increments attempts, sets backoff, FAILED after 3 attempts")
     void testFailingMailSenderIncrementsAttemptsAndFailsAfter3() throws Exception {
         UUID dealId = createDealWithDueDate(tokenA, "fail@cust.com", Instant.now().plusSeconds(86400 * 5));
         Reminder rem = reminderRepository.findByDealId(dealId).get(0);
@@ -192,18 +192,41 @@ class ReminderIntegrationTest extends AbstractIntegrationTest {
         Reminder r1 = reminderRepository.findById(rem.getId()).orElseThrow();
         assertThat(r1.getAttempts()).isEqualTo(1);
         assertThat(r1.getStatus()).isEqualTo(ReminderStatus.PENDING);
+        assertThat(r1.getNextAttemptAt()).isAfter(Instant.now().plusSeconds(14 * 60));
+
+        // Immediate second run does NOT re-claim or re-attempt it because next_attempt_at is in the future
+        int callsAfterRun1 = fakeMailSender.getSendCallCount();
+        reminderSchedulerService.processDueReminders();
+        Reminder r1Repeat = reminderRepository.findById(rem.getId()).orElseThrow();
+        assertThat(r1Repeat.getAttempts()).isEqualTo(1);
+        assertThat(fakeMailSender.getSendCallCount()).isEqualTo(callsAfterRun1);
+
+        // Simulate next_attempt_at passing
+        r1.setNextAttemptAt(Instant.now().minusSeconds(10));
+        reminderRepository.save(r1);
 
         // Run 2: attempt 2
         reminderSchedulerService.processDueReminders();
         Reminder r2 = reminderRepository.findById(rem.getId()).orElseThrow();
         assertThat(r2.getAttempts()).isEqualTo(2);
         assertThat(r2.getStatus()).isEqualTo(ReminderStatus.PENDING);
+        assertThat(r2.getNextAttemptAt()).isAfter(Instant.now().plusSeconds(59 * 60));
+
+        // Immediate run does not re-attempt
+        int callsAfterRun2 = fakeMailSender.getSendCallCount();
+        reminderSchedulerService.processDueReminders();
+        assertThat(fakeMailSender.getSendCallCount()).isEqualTo(callsAfterRun2);
+
+        // Simulate next_attempt_at passing again
+        r2.setNextAttemptAt(Instant.now().minusSeconds(10));
+        reminderRepository.save(r2);
 
         // Run 3: attempt 3 -> FAILED
         reminderSchedulerService.processDueReminders();
         Reminder r3 = reminderRepository.findById(rem.getId()).orElseThrow();
         assertThat(r3.getAttempts()).isEqualTo(3);
         assertThat(r3.getStatus()).isEqualTo(ReminderStatus.FAILED);
+        assertThat(r3.getNextAttemptAt()).isNull();
     }
 
     @Test
@@ -312,12 +335,15 @@ class ReminderIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Layer A (Row Lock): direct concurrent claimAndDispatchOneReminder sends all 20 due reminders exactly once")
-    void testLayerARowLockConcurrency() throws Exception {
+    @DisplayName("Test A1 (exactly-once, lock layer): concurrent threads claimAndDispatchOneReminder with overlap send exactly once")
+    void testTestA1RowLockLayerConcurrency() throws Exception {
         fakeMailSender.reset();
+        // Introduce artificial sleep in sendEmail so both threads overlap execution on claimed rows
+        fakeMailSender.setSendSleepMs(50);
+
         // Create 20 due reminders across 20 deals
         for (int i = 0; i < 20; i++) {
-            UUID dId = createDealWithDueDate(tokenA, "user" + i + "@rowlock.com", Instant.now().plusSeconds(86400 * 5));
+            UUID dId = createDealWithDueDate(tokenA, "usera1_" + i + "@rowlock.com", Instant.now().plusSeconds(86400 * 5));
             Reminder r = reminderRepository.findByDealId(dId).get(0);
             r.setDueAt(Instant.now().minusSeconds(100 + i));
             reminderRepository.save(r);
@@ -330,7 +356,7 @@ class ReminderIntegrationTest extends AbstractIntegrationTest {
             try {
                 latch.await();
                 while (reminderDispatchService.claimAndDispatchOneReminder()) {
-                    // keep claiming until no more due reminders
+                    // keep claiming
                 }
             } catch (Exception ignored) {}
         };
@@ -340,14 +366,74 @@ class ReminderIntegrationTest extends AbstractIntegrationTest {
 
         latch.countDown();
         executor.shutdown();
-        executor.awaitTermination(10, TimeUnit.SECONDS);
+        executor.awaitTermination(15, TimeUnit.SECONDS);
 
-        // Assert all 20 were processed and sent exactly once
+        // Assert all 20 were processed and sent exactly once (no duplicates)
         assertThat(fakeMailSender.getSentMails()).hasSize(20);
         long sentCountInDb = reminderRepository.findAll().stream()
                 .filter(r -> r.getStatus() == ReminderStatus.SENT)
                 .count();
         assertThat(sentCountInDb).isEqualTo(20);
+    }
+
+    @Test
+    @DisplayName("Test A2 (non-blocking, SKIP LOCKED): thread 2 claims a DIFFERENT reminder while thread 1 is blocked on SMTP")
+    void testTestA2NonBlockingSkipLocked() throws Exception {
+        fakeMailSender.reset();
+        // Create 2 due reminders
+        UUID deal1 = createDealWithDueDate(tokenA, "userA2_1@test.com", Instant.now().plusSeconds(86400 * 5));
+        Reminder r1 = reminderRepository.findByDealId(deal1).get(0);
+        r1.setDueAt(Instant.now().minusSeconds(120));
+        reminderRepository.save(r1);
+
+        UUID deal2 = createDealWithDueDate(tokenA, "userA2_2@test.com", Instant.now().plusSeconds(86400 * 5));
+        Reminder r2 = reminderRepository.findByDealId(deal2).get(0);
+        r2.setDueAt(Instant.now().minusSeconds(60));
+        reminderRepository.save(r2);
+
+        CountDownLatch thread1BlockedInSendLatch = new CountDownLatch(1);
+        CountDownLatch thread1ReleaseLatch = new CountDownLatch(1);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        // Thread 1: will block inside sendEmail until thread1ReleaseLatch is counted down
+        java.util.concurrent.Future<?> f1 = executor.submit(() -> {
+            try {
+                fakeMailSender.setSendLatch(new CountDownLatch(1) {
+                    @Override
+                    public void await() throws InterruptedException {
+                        thread1BlockedInSendLatch.countDown();
+                        thread1ReleaseLatch.await();
+                    }
+                });
+                reminderDispatchService.claimAndDispatchOneReminder();
+            } catch (Exception ignored) {}
+        });
+
+        // Wait until thread 1 has claimed reminder 1 and is blocked inside sendEmail (holding the row lock on reminder 1)
+        assertThat(thread1BlockedInSendLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Thread 2: must claim reminder 2 and finish sending it within 2 seconds while thread 1 is STILL blocked!
+        // If SKIP LOCKED is present, it skips reminder 1 and claims reminder 2 immediately.
+        // If SKIP LOCKED is omitted (plain FOR UPDATE), it blocks waiting on reminder 1's lock, exceeding 2s!
+        java.util.concurrent.Future<Boolean> f2 = executor.submit(() -> {
+            // Remove latch for thread 2
+            fakeMailSender.setSendLatch(null);
+            return reminderDispatchService.claimAndDispatchOneReminder();
+        });
+
+        try {
+            Boolean thread2Result = f2.get(2, TimeUnit.SECONDS);
+            assertThat(thread2Result).isTrue();
+        } finally {
+            // Release thread 1 so it can complete
+            thread1ReleaseLatch.countDown();
+            executor.shutdown();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+
+        // Both reminders should now be sent
+        assertThat(fakeMailSender.getSentMails()).hasSize(2);
     }
 
     @Test

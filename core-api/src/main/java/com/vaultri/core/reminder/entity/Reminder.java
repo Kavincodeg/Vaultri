@@ -52,6 +52,9 @@ public class Reminder {
     @Column(name = "due_at", nullable = false)
     private Instant dueAt;
 
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     @Column(name = "sent_at")
     private Instant sentAt;
 

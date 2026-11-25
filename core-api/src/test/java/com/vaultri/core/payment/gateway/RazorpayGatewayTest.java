@@ -148,13 +148,32 @@ class RazorpayGatewayTest {
     }
 
     @Test
-    @DisplayName("cancelPaymentLink: 400 with terminal indicator (e.g. cancelled/expired/paid) is treated as benign ALREADY_TERMINAL")
-    void testCancelPaymentLinkBenign400() {
+    @DisplayName("cancelPaymentLink: 400 with any body (including words like cancelled, expired, paid) is treated as unavailable")
+    void testCancelPaymentLink400WithAnyBodyThrowsUnavailable() {
+        // Body containing "cancelled"
         mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_already_cancelled/cancel"))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Payment link is already cancelled\"}}"));
 
-        razorpayGateway.cancelPaymentLink("plink_already_cancelled");
-        mockServer.verify();
+        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_already_cancelled"))
+                .isInstanceOf(GatewayUnavailableException.class)
+                .hasMessageNotContaining("rzp_test_secret456")
+                .hasMessageNotContaining("Authorization");
+        mockServer.reset();
+
+        // Body containing "paid"
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_paid/cancel"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Payment link is already paid\"}}"));
+
+        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_paid"))
+                .isInstanceOf(GatewayUnavailableException.class);
+        mockServer.reset();
+
+        // Body containing "expired"
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_expired/cancel"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Payment link is expired\"}}"));
+
+        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_expired"))
+                .isInstanceOf(GatewayUnavailableException.class);
     }
 
     @Test

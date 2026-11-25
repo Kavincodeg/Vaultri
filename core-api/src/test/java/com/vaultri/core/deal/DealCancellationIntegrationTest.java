@@ -451,6 +451,31 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
         Payment recoveredPayment = paymentRepository.findByDealIdAndType(deal2.getId(), PaymentType.DEPOSIT).orElseThrow();
         assertThat(recoveredPayment.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
         assertThat(recoveredPayment.getCancelRequestedAt()).isNull();
+
+        // Test webhook moving payment out of CREATED (e.g. to PAID or EXPIRED) between retries
+        Deal deal3 = createDealForSeller(tokenA, 100000L, 20);
+        fakeGateway.setShouldCancelFail(true);
+        mockMvc.perform(post("/api/v1/deals/" + deal3.getId() + "/cancel")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CancelDealRequest(0L, "Webhook move test"))))
+                .andExpect(status().isOk());
+
+        Payment depositPayment3 = paymentRepository.findByDealIdAndType(deal3.getId(), PaymentType.DEPOSIT).orElseThrow();
+        assertThat(depositPayment3.getCancelRequestedAt()).isNotNull();
+
+        // Simulate webhook moving payment to PAID against the real database
+        depositPayment3.setStatus(PaymentStatus.PAID);
+        depositPayment3.setRazorpayPaymentId("pay_real_simulated_" + UUID.randomUUID());
+        paymentRepository.save(depositPayment3);
+
+        int callsBefore = fakeGateway.getCancelCallCount();
+        fakeGateway.setShouldCancelFail(false);
+        retryJob.retryPendingLinkCancellations();
+
+        // Job must skip payments that are no longer CREATED
+        assertThat(fakeGateway.getCancelCallCount()).isEqualTo(callsBefore);
     }
 
     @Test

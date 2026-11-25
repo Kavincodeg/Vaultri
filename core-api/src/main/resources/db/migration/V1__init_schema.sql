@@ -212,6 +212,7 @@ CREATE TABLE reminders (
     status VARCHAR(32) NOT NULL CHECK (status IN ('PENDING', 'SENT', 'FAILED', 'CANCELLED')),
     attempts INT NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     due_at TIMESTAMPTZ NOT NULL,
+    next_attempt_at TIMESTAMPTZ,
     sent_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

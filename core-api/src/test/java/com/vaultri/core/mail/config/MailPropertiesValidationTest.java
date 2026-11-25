@@ -75,6 +75,25 @@ class MailPropertiesValidationTest {
         assertThat(props.toString()).contains("***");
     }
 
+    @Test
+    @DisplayName("SMTP timeouts reach JavaMailSender properties in SmtpMailSender")
+    void testSmtpTimeoutsReachJavaMailProperties() {
+        MockEnvironment env = new MockEnvironment();
+        MailProperties props = new MailProperties(env);
+        props.setConnectionTimeout(3000);
+        props.setTimeout(7000);
+        props.setWriteTimeout(9000);
+
+        org.springframework.mail.javamail.JavaMailSenderImpl impl = new org.springframework.mail.javamail.JavaMailSenderImpl();
+        com.vaultri.core.mail.service.SmtpMailSender sender = new com.vaultri.core.mail.service.SmtpMailSender(impl, props);
+        sender.configureSmtpTimeouts();
+
+        java.util.Properties javaMailProperties = impl.getJavaMailProperties();
+        org.assertj.core.api.Assertions.assertThat(javaMailProperties.getProperty("mail.smtp.connectiontimeout")).isEqualTo("3000");
+        org.assertj.core.api.Assertions.assertThat(javaMailProperties.getProperty("mail.smtp.timeout")).isEqualTo("7000");
+        org.assertj.core.api.Assertions.assertThat(javaMailProperties.getProperty("mail.smtp.writetimeout")).isEqualTo("9000");
+    }
+
     private static org.assertj.core.api.AbstractCharSequenceAssert<?, String> assertThat(String actual) {
         return org.assertj.core.api.Assertions.assertThat(actual);
     }

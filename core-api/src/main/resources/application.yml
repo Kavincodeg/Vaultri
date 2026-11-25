@@ -57,3 +57,6 @@ vaultri:
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     from: ${MAIL_FROM:noreply@vaultri.com}
+    connection-timeout: ${MAIL_SMTP_CONNECTIONTIMEOUT:5000}
+    timeout: ${MAIL_SMTP_TIMEOUT:10000}
+    write-timeout: ${MAIL_SMTP_WRITETIMEOUT:10000}

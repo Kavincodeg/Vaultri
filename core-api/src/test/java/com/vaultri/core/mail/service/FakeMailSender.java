@@ -21,10 +21,28 @@ public class FakeMailSender implements MailSender {
     private volatile boolean shouldFail = false;
     private volatile RuntimeException customExceptionToThrow = null;
     private final AtomicInteger remainingFailures = new AtomicInteger(0);
+    private volatile long sendSleepMs = 0;
+    private volatile java.util.concurrent.CountDownLatch sendLatch = null;
 
     @Override
     public void sendEmail(String to, String subject, String body) {
         sendCallCount.incrementAndGet();
+
+        if (sendLatch != null) {
+            try {
+                sendLatch.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        if (sendSleepMs > 0) {
+            try {
+                Thread.sleep(sendSleepMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
 
         if (customExceptionToThrow != null) {
             throw customExceptionToThrow;
@@ -51,6 +69,16 @@ public class FakeMailSender implements MailSender {
         shouldFail = false;
         customExceptionToThrow = null;
         remainingFailures.set(0);
+        sendSleepMs = 0;
+        sendLatch = null;
+    }
+
+    public void setSendSleepMs(long sleepMs) {
+        this.sendSleepMs = sleepMs;
+    }
+
+    public void setSendLatch(java.util.concurrent.CountDownLatch latch) {
+        this.sendLatch = latch;
     }
 
     public void setCustomExceptionToThrow(RuntimeException ex) {

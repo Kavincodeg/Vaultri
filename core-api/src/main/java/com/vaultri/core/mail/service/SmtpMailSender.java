@@ -1,11 +1,15 @@
 package com.vaultri.core.mail.service;
 
 import com.vaultri.core.mail.config.MailProperties;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.stereotype.Service;
+
+import java.util.Properties;
 
 @Slf4j
 @Service
@@ -14,6 +18,20 @@ public class SmtpMailSender implements MailSender {
 
     private final JavaMailSender javaMailSender;
     private final MailProperties mailProperties;
+
+    @PostConstruct
+    public void configureSmtpTimeouts() {
+        if (javaMailSender instanceof JavaMailSenderImpl impl) {
+            Properties javaMailProperties = impl.getJavaMailProperties();
+            int connTimeout = mailProperties.getConnectionTimeout() != null ? mailProperties.getConnectionTimeout() : 5000;
+            int timeout = mailProperties.getTimeout() != null ? mailProperties.getTimeout() : 10000;
+            int writeTimeout = mailProperties.getWriteTimeout() != null ? mailProperties.getWriteTimeout() : 10000;
+
+            javaMailProperties.put("mail.smtp.connectiontimeout", String.valueOf(connTimeout));
+            javaMailProperties.put("mail.smtp.timeout", String.valueOf(timeout));
+            javaMailProperties.put("mail.smtp.writetimeout", String.valueOf(writeTimeout));
+        }
+    }
 
     @Override
     public void sendEmail(String to, String subject, String body) {

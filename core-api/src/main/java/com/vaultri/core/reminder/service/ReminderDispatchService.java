@@ -87,8 +87,10 @@ public class ReminderDispatchService {
             mailSender.sendEmail(recipient, subject, body);
             reminder.setStatus(ReminderStatus.SENT);
             reminder.setSentAt(Instant.now());
+            reminder.setNextAttemptAt(null);
             reminderRepository.save(reminder);
             auditService.logAction(deal, "REMINDER_SENT", "Deposit payment reminder sent successfully");
+            return true;
         } catch (Exception ex) {
             // SMTP failures log only the exception class name; never recipient addresses, subjects or bodies
             log.error("SMTP delivery failure for reminder {}: {}", reminder.getId(), ex.getClass().getSimpleName());
@@ -96,12 +98,18 @@ public class ReminderDispatchService {
             reminder.setAttempts(attempts);
             if (attempts >= 3) {
                 reminder.setStatus(ReminderStatus.FAILED);
+                reminder.setNextAttemptAt(null);
                 auditService.logAction(deal, "REMINDER_FAILED", "Reminder delivery failed after 3 attempts");
+            } else if (attempts == 1) {
+                // Backoff after attempt 1: 15 minutes
+                reminder.setNextAttemptAt(Instant.now().plus(java.time.Duration.ofMinutes(15)));
+            } else if (attempts == 2) {
+                // Backoff after attempt 2: 60 minutes
+                reminder.setNextAttemptAt(Instant.now().plus(java.time.Duration.ofMinutes(60)));
             }
             reminderRepository.save(reminder);
+            return false;
         }
-
-        return true;
     }
 
     /**

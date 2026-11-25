@@ -100,18 +100,10 @@ public class RazorpayGateway implements PaymentGateway {
                     .body("{}")
                     .retrieve()
                     .toBodilessEntity();
-        } catch (org.springframework.web.client.HttpClientErrorException.BadRequest ex) {
-            // TODO: Benign-400 error text matching must be verified against real Razorpay test-mode API responses before launch.
-            // Currently treated conservatively: only explicit terminal indicators ("cancelled", "expired", "paid")
-            // are considered benign ALREADY_TERMINAL. Any unknown 400 body is treated as GatewayUnavailableException (triggering retry).
-            String responseBody = ex.getResponseBodyAsString().toLowerCase();
-            if (responseBody.contains("cancelled") || responseBody.contains("expired") || responseBody.contains("paid")) {
-                return; // Benign ALREADY_TERMINAL
-            }
-            throw new GatewayUnavailableException("Payment gateway cancellation failed with 400", ex);
         } catch (Exception e) {
-            // Map I/O errors, timeouts, 5xx to GatewayUnavailableException without leaking secrets
-            throw new GatewayUnavailableException("Payment gateway communication failed", e);
+            // Every non-2xx response, including 400 with any body, is treated as GatewayUnavailableException
+            // and goes through the retry-then-give-up path without leaking secrets or payload data
+            throw new GatewayUnavailableException("Payment gateway cancellation failed", e);
         }
     }
 }

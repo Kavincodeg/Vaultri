@@ -19,6 +19,9 @@ public class MailProperties {
     private String username;
     private String password;
     private String from;
+    private Integer connectionTimeout = 5000;
+    private Integer timeout = 10000;
+    private Integer writeTimeout = 10000;
 
     private final Environment environment;
 
