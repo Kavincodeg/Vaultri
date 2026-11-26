@@ -44,6 +44,8 @@ public class SecurityConfig {
     private final JwtProperties jwtProperties;
     private final SecurityProblemSupport securityProblemSupport;
     private final Environment environment;
+    private final com.vaultri.core.ratelimit.filter.IpRateLimitFilter ipRateLimitFilter;
+    private final com.vaultri.core.ratelimit.filter.SellerRateLimitFilter sellerRateLimitFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -88,7 +90,9 @@ public class SecurityConfig {
                 .jwt(jwt -> jwt.decoder(jwtDecoder()))
                 .authenticationEntryPoint(securityProblemSupport)
                 .accessDeniedHandler(securityProblemSupport)
-            );
+            )
+            .addFilterBefore(ipRateLimitFilter, org.springframework.security.web.context.SecurityContextHolderFilter.class)
+            .addFilterAfter(sellerRateLimitFilter, org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class);
 
         return http.build();
     }

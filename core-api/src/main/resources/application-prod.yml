@@ -53,6 +53,10 @@ vaultri:
   jwt:
     secret: ${JWT_SECRET:}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  ratelimit:
+    enabled: ${RATELIMIT_ENABLED:true}
+  cache:
+    enabled: ${CACHE_ENABLED:true}
 
 springdoc:
   api-docs:

@@ -63,3 +63,28 @@ vaultri:
   reminders:
     scheduler-cron: ${REMINDERS_SCHEDULER_CRON:0 0 */12 * * *}
     max-run-duration: ${REMINDERS_MAX_RUN_DURATION:5m}
+  ratelimit:
+    enabled: ${RATELIMIT_ENABLED:false}
+    trusted-proxy-count: ${RATELIMIT_TRUSTED_PROXY_COUNT:0}
+    rules:
+      auth-login-ip:
+        limit: ${RATELIMIT_AUTH_LOGIN_IP_LIMIT:10}
+        window: ${RATELIMIT_AUTH_LOGIN_IP_WINDOW:1m}
+      auth-login-email:
+        limit: ${RATELIMIT_AUTH_LOGIN_EMAIL_LIMIT:5}
+        window: ${RATELIMIT_AUTH_LOGIN_EMAIL_WINDOW:15m}
+      auth-signup:
+        limit: ${RATELIMIT_AUTH_SIGNUP_LIMIT:5}
+        window: ${RATELIMIT_AUTH_SIGNUP_WINDOW:1h}
+      auth-refresh:
+        limit: ${RATELIMIT_AUTH_REFRESH_LIMIT:30}
+        window: ${RATELIMIT_AUTH_REFRESH_WINDOW:1m}
+      seller-deals:
+        limit: ${RATELIMIT_SELLER_DEALS_LIMIT:60}
+        window: ${RATELIMIT_SELLER_DEALS_WINDOW:1m}
+      webhook:
+        limit: ${RATELIMIT_WEBHOOK_LIMIT:600}
+        window: ${RATELIMIT_WEBHOOK_WINDOW:1m}
+  cache:
+    enabled: ${CACHE_ENABLED:false}
+    ttl: ${CACHE_REPORT_TTL:60s}

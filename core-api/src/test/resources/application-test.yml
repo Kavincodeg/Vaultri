@@ -30,6 +30,10 @@ security:
     expiration-ms: 3600000
 
 vaultri:
+  ratelimit:
+    enabled: false
+  cache:
+    enabled: false
   razorpay:
     key-id: rzp_test_dummy_key_id
     key-secret: rzp_test_dummy_key_secret
