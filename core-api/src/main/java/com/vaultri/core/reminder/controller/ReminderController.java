@@ -1,6 +1,7 @@
 package com.vaultri.core.reminder.controller;
 
 import com.vaultri.core.auth.security.CurrentSeller;
+import com.vaultri.core.common.dto.PageResponse;
 import com.vaultri.core.reminder.dto.ReminderListItemResponse;
 import com.vaultri.core.reminder.entity.Reminder;
 import com.vaultri.core.reminder.repository.ReminderRepository;
@@ -8,7 +9,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -31,7 +31,7 @@ public class ReminderController {
 
     @GetMapping
     @Operation(summary = "List reminders", description = "Lists reminders for the authenticated seller's deals")
-    public ResponseEntity<Page<ReminderListItemResponse>> getReminders(
+    public ResponseEntity<PageResponse<ReminderListItemResponse>> getReminders(
             @CurrentSeller UUID sellerId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
@@ -46,6 +46,6 @@ public class ReminderController {
                 .map(ReminderListItemResponse::from)
                 .toList();
 
-        return ResponseEntity.ok(new PageImpl<>(responses, pageable, remindersPage.getTotalElements()));
+        return ResponseEntity.ok(PageResponse.from(remindersPage, responses));
     }
 }

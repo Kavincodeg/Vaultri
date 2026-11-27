@@ -4,6 +4,7 @@ import com.vaultri.core.audit.dto.AuditLogResponse;
 import com.vaultri.core.audit.entity.AuditLog;
 import com.vaultri.core.audit.repository.AuditRepository;
 import com.vaultri.core.auth.security.CurrentSeller;
+import com.vaultri.core.common.dto.PageResponse;
 import com.vaultri.core.deal.dto.CreateDealRequest;
 import com.vaultri.core.deal.dto.DealResponse;
 import com.vaultri.core.deal.entity.Deal;
@@ -85,7 +86,7 @@ public class DealController {
 
     @GetMapping
     @Operation(summary = "List deals", description = "Lists deals for the authenticated seller with pagination and optional status filter")
-    public ResponseEntity<Page<DealResponse>> getDeals(
+    public ResponseEntity<PageResponse<DealResponse>> getDeals(
             @CurrentSeller UUID sellerId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
@@ -128,7 +129,7 @@ public class DealController {
             return DealResponse.from(deal, deposit, fee);
         }).toList();
 
-        return ResponseEntity.ok(new PageImpl<>(responses, pageable, dealsPage.getTotalElements()));
+        return ResponseEntity.ok(PageResponse.from(dealsPage, responses));
     }
 
     @GetMapping("/{id}")
@@ -232,7 +233,7 @@ public class DealController {
 
     @GetMapping("/{id}/audit-logs")
     @Operation(summary = "Get deal audit logs", description = "Retrieves audit trail for a specific deal owned by authenticated seller")
-    public ResponseEntity<Page<AuditLogResponse>> getDealAuditLogs(
+    public ResponseEntity<PageResponse<AuditLogResponse>> getDealAuditLogs(
             @PathVariable UUID id,
             @CurrentSeller UUID sellerId,
             @RequestParam(defaultValue = "0") int page,
@@ -251,6 +252,6 @@ public class DealController {
                 .map(AuditLogResponse::from)
                 .toList();
 
-        return ResponseEntity.ok(new PageImpl<>(responses, pageable, auditLogsPage.getTotalElements()));
+        return ResponseEntity.ok(PageResponse.from(auditLogsPage, responses));
     }
 }

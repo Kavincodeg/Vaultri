@@ -27,6 +27,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -120,6 +122,34 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Exact Top-Level Fields Verification
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Stable pagination shape: asserts exact top-level field names {items, page, size, totalElements, totalPages}")
+    void testExactTopLevelPaginationFieldNames() throws Exception {
+        createDeal(tokenA, "Client FieldTest", "field@example.com", null, "Field Deal", 100000L);
+
+        MvcResult res = mockMvc.perform(get("/api/v1/deals?page=0&size=10")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode root = objectMapper.readTree(res.getResponse().getContentAsString());
+        assertThat(root.isObject()).isTrue();
+
+        List<String> fieldNames = new ArrayList<>();
+        root.fieldNames().forEachRemaining(fieldNames::add);
+
+        assertThat(fieldNames).containsExactlyInAnyOrder("items", "page", "size", "totalElements", "totalPages");
+        assertThat(root.path("items").isArray()).isTrue();
+        assertThat(root.path("page").isInt()).isTrue();
+        assertThat(root.path("size").isInt()).isTrue();
+        assertThat(root.path("totalElements").isIntegralNumber()).isTrue();
+        assertThat(root.path("totalPages").isInt()).isTrue();
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 1. GET /api/v1/deals
     // ─────────────────────────────────────────────────────────────
 
@@ -135,8 +165,8 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode jsonA = objectMapper.readTree(resA.getResponse().getContentAsString());
-        assertThat(jsonA.path("content")).hasSize(1);
-        assertThat(jsonA.path("content").get(0).path("id").asText()).isEqualTo(dealA.getId().toString());
+        assertThat(jsonA.path("items")).hasSize(1);
+        assertThat(jsonA.path("items").get(0).path("id").asText()).isEqualTo(dealA.getId().toString());
 
         // Seller B sees only dealB
         MvcResult resB = mockMvc.perform(get("/api/v1/deals")
@@ -144,8 +174,8 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode jsonB = objectMapper.readTree(resB.getResponse().getContentAsString());
-        assertThat(jsonB.path("content")).hasSize(1);
-        assertThat(jsonB.path("content").get(0).path("id").asText()).isEqualTo(dealB.getId().toString());
+        assertThat(jsonB.path("items")).hasSize(1);
+        assertThat(jsonB.path("items").get(0).path("id").asText()).isEqualTo(dealB.getId().toString());
     }
 
     @Test
@@ -161,11 +191,14 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode json0 = objectMapper.readTree(res0.getResponse().getContentAsString());
-        assertThat(json0.path("content")).hasSize(2);
+        assertThat(json0.path("items")).hasSize(2);
         assertThat(json0.path("totalElements").asInt()).isEqualTo(3);
+        assertThat(json0.path("page").asInt()).isEqualTo(0);
+        assertThat(json0.path("size").asInt()).isEqualTo(2);
+        assertThat(json0.path("totalPages").asInt()).isEqualTo(2);
         // Most recent first: deal3 then deal2
-        assertThat(json0.path("content").get(0).path("id").asText()).isEqualTo(deal3.getId().toString());
-        assertThat(json0.path("content").get(1).path("id").asText()).isEqualTo(deal2.getId().toString());
+        assertThat(json0.path("items").get(0).path("id").asText()).isEqualTo(deal3.getId().toString());
+        assertThat(json0.path("items").get(1).path("id").asText()).isEqualTo(deal2.getId().toString());
 
         // Page 1, size 2 -> should return deal1
         MvcResult res1 = mockMvc.perform(get("/api/v1/deals?page=1&size=2")
@@ -173,8 +206,8 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode json1 = objectMapper.readTree(res1.getResponse().getContentAsString());
-        assertThat(json1.path("content")).hasSize(1);
-        assertThat(json1.path("content").get(0).path("id").asText()).isEqualTo(deal1.getId().toString());
+        assertThat(json1.path("items")).hasSize(1);
+        assertThat(json1.path("items").get(0).path("id").asText()).isEqualTo(deal1.getId().toString());
     }
 
     @Test
@@ -193,8 +226,8 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode json = objectMapper.readTree(res.getResponse().getContentAsString());
-        assertThat(json.path("content")).hasSize(1);
-        assertThat(json.path("content").get(0).path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(json.path("items")).hasSize(1);
+        assertThat(json.path("items").get(0).path("status").asText()).isEqualTo("COMPLETED");
 
         // Invalid status returns 400
         mockMvc.perform(get("/api/v1/deals?status=INVALID_STATUS")
@@ -221,7 +254,7 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode json = objectMapper.readTree(res.getResponse().getContentAsString());
-        assertThat(json.path("content")).isEmpty();
+        assertThat(json.path("items")).isEmpty();
         assertThat(json.path("totalElements").asInt()).isEqualTo(0);
 
         // 401 without token
@@ -244,7 +277,7 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/deals?page=0&size=10")
                         .header("Authorization", "Bearer " + tokenA))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(3));
+                .andExpect(jsonPath("$.items.length()").value(3));
 
         // 1 count query + 1 deal query + 1 payment query = 3 queries total (never 1 + 2*N queries)
         long totalQueries = stats.getPrepareStatementCount();
@@ -266,9 +299,9 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode json = objectMapper.readTree(res.getResponse().getContentAsString());
-        assertThat(json.path("content")).hasSize(1);
+        assertThat(json.path("items")).hasSize(1);
 
-        JsonNode p = json.path("content").get(0);
+        JsonNode p = json.path("items").get(0);
         assertThat(p.path("id").asText()).isNotBlank();
         assertThat(p.path("dealId").asText()).isEqualTo(dealA.getId().toString());
         assertThat(p.path("dealTitle").asText()).isEqualTo("Deal A Title");
@@ -320,9 +353,9 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode json = objectMapper.readTree(res.getResponse().getContentAsString());
-        assertThat(json.path("content")).isNotEmpty();
+        assertThat(json.path("items")).isNotEmpty();
 
-        JsonNode r = json.path("content").get(0);
+        JsonNode r = json.path("items").get(0);
         assertThat(r.path("id").asText()).isNotBlank();
         assertThat(r.path("dealId").asText()).isNotBlank();
         assertThat(r.path("dealTitle").asText()).isEqualTo("Reminder Deal Title");
@@ -377,8 +410,8 @@ class ReadEndpointsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode jsonDeal = objectMapper.readTree(resDeal.getResponse().getContentAsString());
-        assertThat(jsonDeal.path("content")).isNotEmpty();
-        for (JsonNode item : jsonDeal.path("content")) {
+        assertThat(jsonDeal.path("items")).isNotEmpty();
+        for (JsonNode item : jsonDeal.path("items")) {
             assertThat(item.path("id").asText()).isNotBlank();
             assertThat(item.path("dealId").asText()).isEqualTo(deal.getId().toString());
             assertThat(item.path("action").asText()).isNotBlank();

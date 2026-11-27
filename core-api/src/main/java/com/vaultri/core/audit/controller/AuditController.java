@@ -4,11 +4,11 @@ import com.vaultri.core.audit.dto.AuditLogResponse;
 import com.vaultri.core.audit.entity.AuditLog;
 import com.vaultri.core.audit.repository.AuditRepository;
 import com.vaultri.core.auth.security.CurrentSeller;
+import com.vaultri.core.common.dto.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -31,7 +31,7 @@ public class AuditController {
 
     @GetMapping
     @Operation(summary = "List audit logs", description = "Lists audit log entries for all deals owned by the authenticated seller")
-    public ResponseEntity<Page<AuditLogResponse>> getAuditLogs(
+    public ResponseEntity<PageResponse<AuditLogResponse>> getAuditLogs(
             @CurrentSeller UUID sellerId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
@@ -46,6 +46,6 @@ public class AuditController {
                 .map(AuditLogResponse::from)
                 .toList();
 
-        return ResponseEntity.ok(new PageImpl<>(responses, pageable, auditLogsPage.getTotalElements()));
+        return ResponseEntity.ok(PageResponse.from(auditLogsPage, responses));
     }
 }
