@@ -177,7 +177,7 @@ class RazorpayGatewayTest {
     }
 
     @Test
-    @DisplayName("cancelPaymentLink: 400 without terminal indicator throws GatewayUnavailableException without credential leakage")
+    @DisplayName("cancelPaymentLink: 400 throws GatewayUnavailableException without credential leakage")
     void testCancelPaymentLinkNonTerminal400() {
         mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_bad/cancel"))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Invalid request parameter\"}}"));

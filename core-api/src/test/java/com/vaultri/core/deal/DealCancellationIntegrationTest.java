@@ -389,7 +389,7 @@ class DealCancellationIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Deposit Link Cancel Failure: does not block cancellation; retry job cancels and clears flag; gives up after 10 attempts")
+    @DisplayName("Deposit Link Cancel Failure: does not block cancellation; gives up after 10 attempts leaving flag set and writing DEPOSIT_LINK_CANCEL_GAVE_UP")
     void testDepositLinkCancelFailureAndRetryJob() throws Exception {
         Deal deal = createDealForSeller(tokenA, 100000L, 20);
         UUID dealId = deal.getId();

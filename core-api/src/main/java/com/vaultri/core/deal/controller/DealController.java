@@ -1,9 +1,15 @@
 package com.vaultri.core.deal.controller;
 
+import com.vaultri.core.audit.dto.AuditLogResponse;
+import com.vaultri.core.audit.entity.AuditLog;
+import com.vaultri.core.audit.repository.AuditRepository;
 import com.vaultri.core.auth.security.CurrentSeller;
 import com.vaultri.core.deal.dto.CreateDealRequest;
 import com.vaultri.core.deal.dto.DealResponse;
 import com.vaultri.core.deal.entity.Deal;
+import com.vaultri.core.deal.entity.DealStatus;
+import com.vaultri.core.deal.exception.DealNotFoundException;
+import com.vaultri.core.deal.repository.DealRepository;
 import com.vaultri.core.deal.service.DealCreationService;
 import com.vaultri.core.deal.service.DealService;
 import com.vaultri.core.payment.entity.Payment;
@@ -13,6 +19,11 @@ import com.vaultri.core.reminder.entity.Reminder;
 import com.vaultri.core.reminder.entity.ReminderKind;
 import com.vaultri.core.reminder.entity.ReminderStatus;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,12 +37,17 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/deals")
@@ -42,8 +58,10 @@ public class DealController {
     private final DealService dealService;
     private final DealCreationService dealCreationService;
     private final com.vaultri.core.deal.service.DealCancellationService dealCancellationService;
+    private final DealRepository dealRepository;
     private final PaymentRepository paymentRepository;
     private final com.vaultri.core.reminder.repository.ReminderRepository reminderRepository;
+    private final AuditRepository auditRepository;
 
     @PostMapping
     @Operation(summary = "Create deal", description = "Creates a deal draft with a deposit payment link (idempotent)")
@@ -65,10 +83,82 @@ public class DealController {
         return dealCreationService.createDeal(sellerId, idempotencyKey.trim(), request);
     }
 
+    @GetMapping
+    @Operation(summary = "List deals", description = "Lists deals for the authenticated seller with pagination and optional status filter")
+    public ResponseEntity<Page<DealResponse>> getDeals(
+            @CurrentSeller UUID sellerId,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("page must be >= 0 and size must be between 1 and 100");
+        }
+
+        DealStatus dealStatus = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                dealStatus = DealStatus.valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid status: " + status);
+            }
+        }
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<Deal> dealsPage;
+        if (dealStatus != null) {
+            dealsPage = dealRepository.findBySellerIdAndStatus(sellerId, dealStatus, pageable);
+        } else {
+            dealsPage = dealRepository.findBySellerId(sellerId, pageable);
+        }
+
+        List<UUID> dealIds = dealsPage.getContent().stream().map(Deal::getId).toList();
+        Map<UUID, List<Payment>> paymentsByDealId;
+        if (!dealIds.isEmpty()) {
+            List<Payment> payments = paymentRepository.findByDealIdIn(dealIds);
+            paymentsByDealId = payments.stream().collect(Collectors.groupingBy(p -> p.getDeal().getId()));
+        } else {
+            paymentsByDealId = Map.of();
+        }
+
+        List<DealResponse> responses = dealsPage.getContent().stream().map(deal -> {
+            List<Payment> dealPayments = paymentsByDealId.getOrDefault(deal.getId(), List.of());
+            Payment deposit = dealPayments.stream().filter(p -> p.getType() == PaymentType.DEPOSIT).findFirst().orElse(null);
+            Payment fee = dealPayments.stream().filter(p -> p.getType() == PaymentType.CANCELLATION_FEE).findFirst().orElse(null);
+            return DealResponse.from(deal, deposit, fee);
+        }).toList();
+
+        return ResponseEntity.ok(new PageImpl<>(responses, pageable, dealsPage.getTotalElements()));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get deal by ID", description = "Retrieves deal details for the authenticated seller")
     public ResponseEntity<DealResponse> getDeal(@PathVariable UUID id, @CurrentSeller UUID sellerId) {
         Deal deal = dealService.getDeal(sellerId, id);
+        Optional<Payment> depositPayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.DEPOSIT);
+        Optional<Payment> cancellationFeePayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.CANCELLATION_FEE);
+        return ResponseEntity.ok(DealResponse.from(deal, depositPayment.orElse(null), cancellationFeePayment.orElse(null)));
+    }
+
+    @PostMapping("/{id}/start")
+    @Operation(summary = "Start deal work", description = "Transitions deal from DEPOSIT_PAID to IN_PROGRESS")
+    public ResponseEntity<DealResponse> startDeal(
+            @PathVariable UUID id,
+            @CurrentSeller UUID sellerId
+    ) {
+        Deal deal = dealService.startProgress(id, sellerId);
+        Optional<Payment> depositPayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.DEPOSIT);
+        Optional<Payment> cancellationFeePayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.CANCELLATION_FEE);
+        return ResponseEntity.ok(DealResponse.from(deal, depositPayment.orElse(null), cancellationFeePayment.orElse(null)));
+    }
+
+    @PostMapping("/{id}/complete")
+    @Operation(summary = "Complete deal", description = "Transitions deal from IN_PROGRESS to COMPLETED")
+    public ResponseEntity<DealResponse> completeDeal(
+            @PathVariable UUID id,
+            @CurrentSeller UUID sellerId
+    ) {
+        Deal deal = dealService.complete(id, sellerId);
         Optional<Payment> depositPayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.DEPOSIT);
         Optional<Payment> cancellationFeePayment = paymentRepository.findByDealIdAndType(deal.getId(), PaymentType.CANCELLATION_FEE);
         return ResponseEntity.ok(DealResponse.from(deal, depositPayment.orElse(null), cancellationFeePayment.orElse(null)));
@@ -138,5 +228,29 @@ public class DealController {
         }
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+    }
+
+    @GetMapping("/{id}/audit-logs")
+    @Operation(summary = "Get deal audit logs", description = "Retrieves audit trail for a specific deal owned by authenticated seller")
+    public ResponseEntity<Page<AuditLogResponse>> getDealAuditLogs(
+            @PathVariable UUID id,
+            @CurrentSeller UUID sellerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("page must be >= 0 and size must be between 1 and 100");
+        }
+
+        // Deal ownership check - throws DealNotFoundException (404) if deal not owned by seller or doesn't exist
+        dealRepository.findByIdAndSellerId(id, sellerId).orElseThrow(() -> new DealNotFoundException(id));
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<AuditLog> auditLogsPage = auditRepository.findByDealIdAndSellerId(id, sellerId, pageable);
+        List<AuditLogResponse> responses = auditLogsPage.getContent().stream()
+                .map(AuditLogResponse::from)
+                .toList();
+
+        return ResponseEntity.ok(new PageImpl<>(responses, pageable, auditLogsPage.getTotalElements()));
     }
 }

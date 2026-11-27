@@ -3,6 +3,8 @@ package com.vaultri.core.payment.repository;
 import com.vaultri.core.payment.entity.Payment;
 import com.vaultri.core.payment.entity.PaymentStatus;
 import com.vaultri.core.payment.entity.PaymentType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +26,13 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     Optional<Payment> findByRazorpayPaymentId(String razorpayPaymentId);
     Optional<Payment> findByDealIdAndType(UUID dealId, PaymentType type);
     List<Payment> findByDealId(UUID dealId);
+
+    @Query("SELECT p FROM Payment p JOIN FETCH p.deal d WHERE p.deal.id IN :dealIds")
+    List<Payment> findByDealIdIn(@Param("dealIds") Collection<UUID> dealIds);
+
+    @Query(value = "SELECT p FROM Payment p JOIN FETCH p.deal d WHERE d.seller.id = :sellerId",
+           countQuery = "SELECT count(p) FROM Payment p JOIN p.deal d WHERE d.seller.id = :sellerId")
+    Page<Payment> findBySellerId(@Param("sellerId") UUID sellerId, Pageable pageable);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Payment p SET p.status = 'PAID', p.razorpayPaymentId = :paymentId, p.updatedAt = :now WHERE p.id = :id AND p.status = 'CREATED'")

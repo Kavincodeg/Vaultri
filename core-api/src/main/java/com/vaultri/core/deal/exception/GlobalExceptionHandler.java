@@ -118,4 +118,12 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://vaultri.com/errors/validation-error"));
         return problem;
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Bad Request");
+        problem.setType(URI.create("https://vaultri.com/errors/bad-request"));
+        return problem;
+    }
 }

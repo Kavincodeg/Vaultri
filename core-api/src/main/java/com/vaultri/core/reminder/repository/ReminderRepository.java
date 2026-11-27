@@ -3,6 +3,8 @@ package com.vaultri.core.reminder.repository;
 import com.vaultri.core.reminder.entity.Reminder;
 import com.vaultri.core.reminder.entity.ReminderKind;
 import com.vaultri.core.reminder.entity.ReminderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,6 +18,10 @@ import java.util.UUID;
 @Repository
 public interface ReminderRepository extends JpaRepository<Reminder, UUID> {
     List<Reminder> findByDealId(UUID dealId);
+
+    @Query(value = "SELECT r FROM Reminder r JOIN FETCH r.deal d WHERE d.seller.id = :sellerId",
+           countQuery = "SELECT count(r) FROM Reminder r JOIN r.deal d WHERE d.seller.id = :sellerId")
+    Page<Reminder> findBySellerId(@Param("sellerId") UUID sellerId, Pageable pageable);
 
     @Modifying
     @Query("UPDATE Reminder r SET r.status = 'CANCELLED' WHERE r.deal.id = :dealId AND r.status = 'PENDING'")

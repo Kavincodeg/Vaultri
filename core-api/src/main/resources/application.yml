@@ -66,6 +66,7 @@ vaultri:
   ratelimit:
     enabled: ${RATELIMIT_ENABLED:false}
     trusted-proxy-count: ${RATELIMIT_TRUSTED_PROXY_COUNT:0}
+    internal-secret: ${RATELIMIT_INTERNAL_SECRET:}
     rules:
       auth-login-ip:
         limit: ${RATELIMIT_AUTH_LOGIN_IP_LIMIT:10}
