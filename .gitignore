@@ -40,3 +40,10 @@ next-env.d.ts
 
 # internal documentation
 docs/ANALYSIS.md
+
+# build and test reports
+test-output.txt
+tsc-output.txt
+lint-output.txt
+build-output.txt
+

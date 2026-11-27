@@ -17,7 +17,15 @@ export default function SignInPage() {
     setLoading(true)
     try {
       const res = await signIn('credentials', { email, password, redirect: false })
-      if (res?.error) throw new Error('Invalid email or password')
+      if (res?.error) {
+        if (res.error === 'TOO_MANY_ATTEMPTS') {
+          throw new Error('Too many attempts, try again later')
+        }
+        if (res.error === 'SERVICE_UNAVAILABLE') {
+          throw new Error('Authentication service temporarily unavailable')
+        }
+        throw new Error('Invalid email or password')
+      }
       router.push('/dashboard')
     } catch (err: any) {
       setError(err.message || 'Sign in failed')
@@ -41,7 +49,7 @@ export default function SignInPage() {
           </div>
           <div className='form-group'>
             <label className='form-label'>Password</label>
-            <input type='password' className='form-input' placeholder='????????' value={password} onChange={e => setPassword(e.target.value)} required />
+            <input type='password' className='form-input' placeholder='••••••••' value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
           {error && <div className='alert alert-error'>{error}</div>}
           <button type='submit' className='btn btn-primary' style={{ justifyContent: 'center' }} disabled={loading}>
