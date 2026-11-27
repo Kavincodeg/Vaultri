@@ -5,6 +5,7 @@ import com.vaultri.core.audit.entity.AuditLog;
 import com.vaultri.core.audit.repository.AuditRepository;
 import com.vaultri.core.auth.security.CurrentSeller;
 import com.vaultri.core.common.dto.PageResponse;
+import com.vaultri.core.common.exception.InvalidQueryParameterException;
 import com.vaultri.core.deal.dto.CreateDealRequest;
 import com.vaultri.core.deal.dto.DealResponse;
 import com.vaultri.core.deal.entity.Deal;
@@ -93,7 +94,7 @@ public class DealController {
             @RequestParam(defaultValue = "20") int size
     ) {
         if (page < 0 || size < 1 || size > 100) {
-            throw new IllegalArgumentException("page must be >= 0 and size must be between 1 and 100");
+            throw new InvalidQueryParameterException("page must be >= 0 and size must be between 1 and 100");
         }
 
         DealStatus dealStatus = null;
@@ -101,7 +102,7 @@ public class DealController {
             try {
                 dealStatus = DealStatus.valueOf(status.trim().toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid status: " + status);
+                throw new InvalidQueryParameterException("Invalid status: " + status);
             }
         }
 
@@ -240,7 +241,7 @@ public class DealController {
             @RequestParam(defaultValue = "20") int size
     ) {
         if (page < 0 || size < 1 || size > 100) {
-            throw new IllegalArgumentException("page must be >= 0 and size must be between 1 and 100");
+            throw new InvalidQueryParameterException("page must be >= 0 and size must be between 1 and 100");
         }
 
         // Deal ownership check - throws DealNotFoundException (404) if deal not owned by seller or doesn't exist

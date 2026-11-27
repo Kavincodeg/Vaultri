@@ -1,16 +1,12 @@
 package com.vaultri.core.payment.gateway.dto;
 
-import com.vaultri.core.payment.entity.PaymentType;
-
+import java.time.Instant;
 import java.util.UUID;
 
 public record CreateLinkRequest(
         UUID paymentId,
         long amountPaise,
-        String description,
-        String customerName,
-        String customerEmail,
-        String customerPhone,
+        String title,
         UUID dealId,
-        PaymentType type
+        Instant dueDate
 ) {}

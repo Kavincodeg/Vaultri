@@ -51,6 +51,7 @@ vaultri:
     key-secret: ${RAZORPAY_KEY_SECRET:}
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
     base-url: ${RAZORPAY_BASE_URL:https://api.razorpay.com}
+    link-expiry-days: ${RAZORPAY_LINK_EXPIRY_DAYS:30}
   mail:
     host: ${MAIL_HOST:}
     port: ${MAIL_PORT:587}

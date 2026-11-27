@@ -21,6 +21,7 @@ public class RazorpayProperties {
     private String keySecret;
     private String webhookSecret;
     private String baseUrl = "https://api.razorpay.com";
+    private int linkExpiryDays = 30;
 
     public RazorpayProperties(Environment environment) {
         this.environment = environment;

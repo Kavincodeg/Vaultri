@@ -1,5 +1,6 @@
 package com.vaultri.core.deal.service;
 
+import com.vaultri.core.audit.service.AuditService;
 import com.vaultri.core.deal.dto.CancelDealRequest;
 import com.vaultri.core.deal.dto.DealResponse;
 import com.vaultri.core.deal.entity.Deal;
@@ -22,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -30,6 +32,7 @@ public class DealCancellationService {
 
     private final DealCancellationStepService stepService;
     private final PaymentGateway paymentGateway;
+    private final AuditService auditService;
 
     public String computeRequestHash(CancelDealRequest req) {
         try {
@@ -98,16 +101,41 @@ public class DealCancellationService {
             CreateLinkRequest linkRequest = new CreateLinkRequest(
                     feePayment.getId(),
                     feePayment.getAmount(),
-                    "Cancellation fee for " + deal.getTitle(),
-                    deal.getCustomerName(),
-                    deal.getCustomerEmail(),
-                    deal.getCustomerPhone(),
+                    deal.getTitle(),
                     deal.getId(),
-                    PaymentType.CANCELLATION_FEE
+                    null // Cancellation fee uses default linkExpiryDays
             );
 
             try {
-                feeLinkResponse = paymentGateway.createPaymentLink(linkRequest);
+                if (stepA.isFeePaymentRecovered()) {
+                    // Recovered fee payment row: look up link at Razorpay by reference_id
+                    Optional<PaymentLinkResponse> existingLinkOpt = paymentGateway.findPaymentLinkByReferenceId(feePayment.getId().toString());
+                    if (existingLinkOpt.isPresent()) {
+                        PaymentLinkResponse existingLink = existingLinkOpt.get();
+                        if ("created".equalsIgnoreCase(existingLink.status())) {
+                            feeLinkResponse = existingLink;
+                        } else {
+                            // Existing link is not in "created" status. Do NOT adopt and do NOT create another link.
+                            auditService.logAction(deal, "PAYMENT_LINK_NEEDS_REVIEW",
+                                    String.format("Payment %s has existing gateway link with status %s", feePayment.getId(), existingLink.status()));
+                            stepService.releaseLockOnFailure(sellerId, key);
+                            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                                    HttpStatus.BAD_GATEWAY,
+                                    "Payment gateway is temporarily unavailable. Please retry with the same Idempotency-Key."
+                            );
+                            problem.setTitle("Gateway Unavailable");
+                            problem.setType(URI.create("https://vaultri.com/errors/gateway-unavailable"));
+                            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                                    .header(HttpHeaders.RETRY_AFTER, "1")
+                                    .body(problem);
+                        }
+                    } else {
+                        feeLinkResponse = paymentGateway.createPaymentLink(linkRequest);
+                    }
+                } else {
+                    // Fresh fee payment row: goes straight to createPaymentLink without lookup
+                    feeLinkResponse = paymentGateway.createPaymentLink(linkRequest);
+                }
             } catch (GatewayUnavailableException e) {
                 stepService.releaseLockOnFailure(sellerId, key);
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(

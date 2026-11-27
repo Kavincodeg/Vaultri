@@ -39,37 +39,39 @@ public class DealCreationStepService {
         private final boolean alreadyCompleted;
         private final boolean differentHashConflict;
         private final boolean inProgressNoResume;
+        private final boolean recovered;
         private final Deal deal;
         private final Payment payment;
         private final Integer storedStatus;
         private final String storedBody;
 
         private StepAResult(boolean readyForStepB, boolean alreadyCompleted, boolean differentHashConflict,
-                            boolean inProgressNoResume, Deal deal, Payment payment, Integer storedStatus, String storedBody) {
+                            boolean inProgressNoResume, boolean recovered, Deal deal, Payment payment, Integer storedStatus, String storedBody) {
             this.readyForStepB = readyForStepB;
             this.alreadyCompleted = alreadyCompleted;
             this.differentHashConflict = differentHashConflict;
             this.inProgressNoResume = inProgressNoResume;
+            this.recovered = recovered;
             this.deal = deal;
             this.payment = payment;
             this.storedStatus = storedStatus;
             this.storedBody = storedBody;
         }
 
-        public static StepAResult ready(Deal deal, Payment payment) {
-            return new StepAResult(true, false, false, false, deal, payment, null, null);
+        public static StepAResult ready(Deal deal, Payment payment, boolean recovered) {
+            return new StepAResult(true, false, false, false, recovered, deal, payment, null, null);
         }
 
         public static StepAResult completed(int status, String body) {
-            return new StepAResult(false, true, false, false, null, null, status, body);
+            return new StepAResult(false, true, false, false, false, null, null, status, body);
         }
 
         public static StepAResult differentHash() {
-            return new StepAResult(false, false, true, false, null, null, null, null);
+            return new StepAResult(false, false, true, false, false, null, null, null, null);
         }
 
         public static StepAResult inProgress() {
-            return new StepAResult(false, false, false, true, null, null, null, null);
+            return new StepAResult(false, false, false, true, false, null, null, null, null);
         }
     }
 
@@ -114,7 +116,7 @@ public class DealCreationStepService {
             keyEntity.setDeal(pending);
             idempotencyKeyRepository.save(keyEntity);
 
-            return StepAResult.ready(pending, savedPayment);
+            return StepAResult.ready(pending, savedPayment, false);
         } else {
             IdempotencyKey existingKey = idempotencyKeyRepository.findBySellerIdAndKeyWithDeal(sellerId, key).orElseThrow();
             if (!Objects.equals(existingKey.getRequestHash(), requestHash)) {
@@ -131,7 +133,7 @@ public class DealCreationStepService {
                     // Try to acquire the execution lock so only one retry thread can resume Step B
                     int acquired = idempotencyKeyRepository.tryAcquireLock(sellerId, key, now, now.plusSeconds(30));
                     if (acquired == 1) {
-                        return StepAResult.ready(deal, payment);
+                        return StepAResult.ready(deal, payment, true);
                     }
                 }
             }

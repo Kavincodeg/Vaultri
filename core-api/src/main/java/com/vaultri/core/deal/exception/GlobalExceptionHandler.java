@@ -119,11 +119,19 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
+    @ExceptionHandler(com.vaultri.core.common.exception.InvalidQueryParameterException.class)
+    public ProblemDetail handleInvalidQueryParameter(com.vaultri.core.common.exception.InvalidQueryParameterException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Bad Request");
         problem.setType(URI.create("https://vaultri.com/errors/bad-request"));
+        return problem;
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleGenericException(Exception ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred");
+        problem.setTitle("Internal Server Error");
+        problem.setType(URI.create("https://vaultri.com/errors/internal-server-error"));
         return problem;
     }
 }

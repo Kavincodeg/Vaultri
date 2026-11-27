@@ -2,6 +2,7 @@ package com.vaultri.core.payment.controller;
 
 import com.vaultri.core.auth.security.CurrentSeller;
 import com.vaultri.core.common.dto.PageResponse;
+import com.vaultri.core.common.exception.InvalidQueryParameterException;
 import com.vaultri.core.payment.dto.PaymentListItemResponse;
 import com.vaultri.core.payment.entity.Payment;
 import com.vaultri.core.payment.repository.PaymentRepository;
@@ -37,7 +38,7 @@ public class PaymentController {
             @RequestParam(defaultValue = "20") int size
     ) {
         if (page < 0 || size < 1 || size > 100) {
-            throw new IllegalArgumentException("page must be >= 0 and size must be between 1 and 100");
+            throw new InvalidQueryParameterException("page must be >= 0 and size must be between 1 and 100");
         }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));

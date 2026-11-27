@@ -42,6 +42,7 @@ public record AuditLogResponse(
             case "PAYMENT_RECEIVED_AFTER_CANCELLATION" -> "Payment received after deal was cancelled";
             case "PAYMENT_LINK_EXPIRED" -> "Payment link expired";
             case "PAYMENT_LINK_CANCELLED" -> "Payment link cancelled";
+            case "PAYMENT_LINK_NEEDS_REVIEW" -> "Payment link needs review";
             default -> "Deal action recorded";
         };
     }

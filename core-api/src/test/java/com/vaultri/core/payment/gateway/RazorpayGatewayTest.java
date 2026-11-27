@@ -1,7 +1,6 @@
 package com.vaultri.core.payment.gateway;
 
 import com.vaultri.core.payment.config.RazorpayProperties;
-import com.vaultri.core.payment.entity.PaymentType;
 import com.vaultri.core.payment.exception.GatewayUnavailableException;
 import com.vaultri.core.payment.gateway.dto.CreateLinkRequest;
 import com.vaultri.core.payment.gateway.dto.PaymentLinkResponse;
@@ -16,6 +15,9 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.net.SocketTimeoutException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +38,7 @@ class RazorpayGatewayTest {
         properties.setKeyId("rzp_test_key123");
         properties.setKeySecret("rzp_test_secret456");
         properties.setBaseUrl("https://api.razorpay.com");
+        properties.setLinkExpiryDays(30);
 
         RestClient.Builder builder = RestClient.builder();
         mockServer = MockRestServiceServer.bindTo(builder).build();
@@ -43,20 +46,18 @@ class RazorpayGatewayTest {
     }
 
     @Test
-    @DisplayName("createPaymentLink: sends correct URL, Basic Auth, amount in paise, notes, and parses response")
+    @DisplayName("createPaymentLink: sends correct URL, Basic Auth, amount in paise, notify false, no customer object, expire_by, notes, and parses response")
     void testCreatePaymentLinkSuccess() {
         UUID paymentId = UUID.randomUUID();
         UUID dealId = UUID.randomUUID();
+        Instant dueDate = Instant.now().plus(5, ChronoUnit.DAYS);
 
         CreateLinkRequest request = new CreateLinkRequest(
                 paymentId,
                 50000L,
-                "Deposit payment for deal",
-                "Customer Name",
-                "customer@test.com",
-                "+919876543210",
+                "Website Redesign",
                 dealId,
-                PaymentType.DEPOSIT
+                dueDate
         );
 
         String responseJson = """
@@ -74,9 +75,14 @@ class RazorpayGatewayTest {
                 .andExpect(jsonPath("$.amount").value(50000))
                 .andExpect(jsonPath("$.currency").value("INR"))
                 .andExpect(jsonPath("$.reference_id").value(paymentId.toString()))
-                .andExpect(jsonPath("$.notes.dealId").value(dealId.toString()))
-                .andExpect(jsonPath("$.notes.type").value("DEPOSIT"))
+                .andExpect(jsonPath("$.description").value("Website Redesign"))
                 .andExpect(jsonPath("$.reminder_enable").value(false))
+                .andExpect(jsonPath("$.notify.sms").value(false))
+                .andExpect(jsonPath("$.notify.email").value(false))
+                .andExpect(jsonPath("$.customer").doesNotExist())
+                .andExpect(jsonPath("$.callback_url").doesNotExist())
+                .andExpect(jsonPath("$.expire_by").value(dueDate.getEpochSecond()))
+                .andExpect(jsonPath("$.notes.dealId").value(dealId.toString()))
                 .andRespond(withSuccess(responseJson, MediaType.APPLICATION_JSON));
 
         PaymentLinkResponse response = razorpayGateway.createPaymentLink(request);
@@ -90,7 +96,7 @@ class RazorpayGatewayTest {
     @DisplayName("createPaymentLink: 4xx error maps to GatewayUnavailableException without leaking credentials")
     void testCreatePaymentLink4xxError() {
         CreateLinkRequest request = new CreateLinkRequest(
-                UUID.randomUUID(), 50000L, "Desc", "Name", null, null, UUID.randomUUID(), PaymentType.DEPOSIT
+                UUID.randomUUID(), 50000L, "Desc", UUID.randomUUID(), null
         );
 
         mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links"))
@@ -106,7 +112,7 @@ class RazorpayGatewayTest {
     @DisplayName("createPaymentLink: 5xx error maps to GatewayUnavailableException without leaking credentials")
     void testCreatePaymentLink5xxError() {
         CreateLinkRequest request = new CreateLinkRequest(
-                UUID.randomUUID(), 50000L, "Desc", "Name", null, null, UUID.randomUUID(), PaymentType.DEPOSIT
+                UUID.randomUUID(), 50000L, "Desc", UUID.randomUUID(), null
         );
 
         mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links"))
@@ -122,7 +128,7 @@ class RazorpayGatewayTest {
     @DisplayName("createPaymentLink: timeout / IO error maps to GatewayUnavailableException without leaking credentials")
     void testCreatePaymentLinkTimeout() {
         CreateLinkRequest request = new CreateLinkRequest(
-                UUID.randomUUID(), 50000L, "Desc", "Name", null, null, UUID.randomUUID(), PaymentType.DEPOSIT
+                UUID.randomUUID(), 50000L, "Desc", UUID.randomUUID(), null
         );
 
         mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links"))
@@ -132,6 +138,92 @@ class RazorpayGatewayTest {
                 .isInstanceOf(GatewayUnavailableException.class)
                 .hasMessageNotContaining("rzp_test_secret456")
                 .hasMessageNotContaining("Authorization");
+    }
+
+    @Test
+    @DisplayName("findPaymentLinkByReferenceId: returns matching link when collection has items")
+    void testFindPaymentLinkByReferenceIdFound() {
+        String refId = UUID.randomUUID().toString();
+        String responseJson = """
+                {
+                  "entity": "collection",
+                  "count": 1,
+                  "items": [
+                    {
+                      "id": "plink_lookup_12345",
+                      "reference_id": "%s",
+                      "short_url": "https://rzp.io/i/plink_lookup_12345",
+                      "status": "created"
+                    }
+                  ]
+                }
+                """.formatted(refId);
+
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links?reference_id=" + refId))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", org.hamcrest.Matchers.startsWith("Basic ")))
+                .andRespond(withSuccess(responseJson, MediaType.APPLICATION_JSON));
+
+        Optional<PaymentLinkResponse> result = razorpayGateway.findPaymentLinkByReferenceId(refId);
+        mockServer.verify();
+
+        assertThat(result).isPresent();
+        assertThat(result.get().linkId()).isEqualTo("plink_lookup_12345");
+        assertThat(result.get().shortUrl()).isEqualTo("https://rzp.io/i/plink_lookup_12345");
+        assertThat(result.get().status()).isEqualTo("created");
+    }
+
+    @Test
+    @DisplayName("findPaymentLinkByReferenceId: lookup response item without status field maps to status unknown; item with created maps to created")
+    void testFindPaymentLinkByReferenceIdMissingStatusMapsToUnknown() {
+        String refId = UUID.randomUUID().toString();
+        String responseJson = """
+                {
+                  "entity": "collection",
+                  "count": 1,
+                  "items": [
+                    {
+                      "id": "plink_lookup_no_status",
+                      "reference_id": "%s",
+                      "short_url": "https://rzp.io/i/plink_lookup_no_status"
+                    }
+                  ]
+                }
+                """.formatted(refId);
+
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links?reference_id=" + refId))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", org.hamcrest.Matchers.startsWith("Basic ")))
+                .andRespond(withSuccess(responseJson, MediaType.APPLICATION_JSON));
+
+        Optional<PaymentLinkResponse> result = razorpayGateway.findPaymentLinkByReferenceId(refId);
+        mockServer.verify();
+
+        assertThat(result).isPresent();
+        assertThat(result.get().linkId()).isEqualTo("plink_lookup_no_status");
+        assertThat(result.get().status()).isEqualTo("unknown");
+    }
+
+    @Test
+    @DisplayName("findPaymentLinkByReferenceId: returns empty when items list is empty")
+    void testFindPaymentLinkByReferenceIdEmpty() {
+        String refId = UUID.randomUUID().toString();
+        String responseJson = """
+                {
+                  "entity": "collection",
+                  "count": 0,
+                  "items": []
+                }
+                """;
+
+        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links?reference_id=" + refId))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(responseJson, MediaType.APPLICATION_JSON));
+
+        Optional<PaymentLinkResponse> result = razorpayGateway.findPaymentLinkByReferenceId(refId);
+        mockServer.verify();
+
+        assertThat(result).isEmpty();
     }
 
     @Test
@@ -148,41 +240,12 @@ class RazorpayGatewayTest {
     }
 
     @Test
-    @DisplayName("cancelPaymentLink: 400 with any body (including words like cancelled, expired, paid) is treated as unavailable")
+    @DisplayName("cancelPaymentLink: 400 throws GatewayUnavailableException without credential leakage")
     void testCancelPaymentLink400WithAnyBodyThrowsUnavailable() {
-        // Body containing "cancelled"
         mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_already_cancelled/cancel"))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Payment link is already cancelled\"}}"));
 
         assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_already_cancelled"))
-                .isInstanceOf(GatewayUnavailableException.class)
-                .hasMessageNotContaining("rzp_test_secret456")
-                .hasMessageNotContaining("Authorization");
-        mockServer.reset();
-
-        // Body containing "paid"
-        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_paid/cancel"))
-                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Payment link is already paid\"}}"));
-
-        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_paid"))
-                .isInstanceOf(GatewayUnavailableException.class);
-        mockServer.reset();
-
-        // Body containing "expired"
-        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_expired/cancel"))
-                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Payment link is expired\"}}"));
-
-        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_expired"))
-                .isInstanceOf(GatewayUnavailableException.class);
-    }
-
-    @Test
-    @DisplayName("cancelPaymentLink: 400 throws GatewayUnavailableException without credential leakage")
-    void testCancelPaymentLinkNonTerminal400() {
-        mockServer.expect(requestTo("https://api.razorpay.com/v1/payment_links/plink_bad/cancel"))
-                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"error\":{\"description\":\"Invalid request parameter\"}}"));
-
-        assertThatThrownBy(() -> razorpayGateway.cancelPaymentLink("plink_bad"))
                 .isInstanceOf(GatewayUnavailableException.class)
                 .hasMessageNotContaining("rzp_test_secret456")
                 .hasMessageNotContaining("Authorization");

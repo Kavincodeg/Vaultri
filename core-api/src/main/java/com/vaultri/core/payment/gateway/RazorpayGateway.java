@@ -7,15 +7,17 @@ import com.vaultri.core.payment.gateway.dto.PaymentLinkResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 public class RazorpayGateway implements PaymentGateway {
@@ -36,33 +38,42 @@ public class RazorpayGateway implements PaymentGateway {
                 .build();
     }
 
+    private String getBasicAuth() {
+        String credentials = properties.getKeyId() + ":" + properties.getKeySecret();
+        return "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+    }
+
     @Override
     public PaymentLinkResponse createPaymentLink(CreateLinkRequest request) {
+        Instant now = Instant.now();
+        long expireBy;
+        if (request.dueDate() != null && request.dueDate().isAfter(now.plus(20, ChronoUnit.MINUTES))) {
+            expireBy = request.dueDate().getEpochSecond();
+        } else {
+            expireBy = now.plus(properties.getLinkExpiryDays(), ChronoUnit.DAYS).getEpochSecond();
+        }
+
         Map<String, Object> body = new HashMap<>();
         body.put("amount", request.amountPaise());
         body.put("currency", "INR");
-        body.put("description", request.description());
+        body.put("description", request.title());
         body.put("reference_id", request.paymentId().toString());
         body.put("reminder_enable", false);
+        body.put("expire_by", expireBy);
 
-        Map<String, Object> customer = new HashMap<>();
-        if (request.customerName() != null) customer.put("name", request.customerName());
-        if (request.customerEmail() != null) customer.put("email", request.customerEmail());
-        if (request.customerPhone() != null) customer.put("contact", request.customerPhone());
-        body.put("customer", customer);
+        Map<String, Boolean> notify = new HashMap<>();
+        notify.put("sms", false);
+        notify.put("email", false);
+        body.put("notify", notify);
 
         Map<String, String> notes = new HashMap<>();
         notes.put("dealId", request.dealId().toString());
-        notes.put("type", request.type().name());
         body.put("notes", notes);
-
-        String credentials = properties.getKeyId() + ":" + properties.getKeySecret();
-        String basicAuth = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
 
         try {
             Map<?, ?> response = restClient.post()
                     .uri("/v1/payment_links")
-                    .header(HttpHeaders.AUTHORIZATION, basicAuth)
+                    .header(HttpHeaders.AUTHORIZATION, getBasicAuth())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -84,26 +95,78 @@ public class RazorpayGateway implements PaymentGateway {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public Optional<PaymentLinkResponse> findPaymentLinkByReferenceId(String referenceId) {
+        if (referenceId == null || referenceId.isBlank()) {
+            return Optional.empty();
+        }
+
+        try {
+            Map<?, ?> response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/v1/payment_links")
+                            .queryParam("reference_id", referenceId)
+                            .build())
+                    .header(HttpHeaders.AUTHORIZATION, getBasicAuth())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(Map.class);
+
+            if (response == null) {
+                return Optional.empty();
+            }
+
+            // Razorpay collection response contains "payment_links" or "items"
+            List<?> items = null;
+            if (response.containsKey("payment_links") && response.get("payment_links") instanceof List<?> list) {
+                items = list;
+            } else if (response.containsKey("items") && response.get("items") instanceof List<?> list) {
+                items = list;
+            }
+
+            if (items == null || items.isEmpty()) {
+                return Optional.empty();
+            }
+
+            for (Object obj : items) {
+                if (obj instanceof Map<?, ?> map) {
+                    Object refIdObj = map.get("reference_id");
+                    if (refIdObj != null && referenceId.equals(refIdObj.toString())) {
+                        String linkId = (String) map.get("id");
+                        String shortUrl = (String) map.get("short_url");
+                        String status = (String) map.get("status");
+                        if (linkId != null) {
+                            return Optional.of(new PaymentLinkResponse(linkId, shortUrl, (status != null && !status.isBlank()) ? status : "unknown"));
+                        }
+                    }
+                }
+            }
+
+            return Optional.empty();
+        } catch (GatewayUnavailableException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GatewayUnavailableException("Payment gateway communication failed", e);
+        }
+    }
+
+    @Override
     public void cancelPaymentLink(String linkId) {
         if (linkId == null || linkId.isBlank()) {
             return;
         }
 
-        String credentials = properties.getKeyId() + ":" + properties.getKeySecret();
-        String basicAuth = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
-
         try {
             restClient.post()
                     .uri("/v1/payment_links/{id}/cancel", linkId)
-                    .header(HttpHeaders.AUTHORIZATION, basicAuth)
+                    .header(HttpHeaders.AUTHORIZATION, getBasicAuth())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body("{}")
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
-            // Every non-2xx response, including 400 with any body, is treated as GatewayUnavailableException
-            // and goes through the retry-then-give-up path without leaking secrets or payload data
-            throw new GatewayUnavailableException("Payment gateway cancellation failed", e);
+            // Never echo secret or authorization header
+            throw new GatewayUnavailableException("Payment gateway cancel communication failed", e);
         }
     }
 }

@@ -47,6 +47,7 @@ public class DealCancellationStepService {
         private final boolean alreadyCompleted;
         private final boolean differentHashConflict;
         private final boolean inProgressNoResume;
+        private final boolean feePaymentRecovered;
         private final Deal deal;
         private final Payment feePayment;
         private final Payment depositPaymentToCancel;
@@ -54,12 +55,13 @@ public class DealCancellationStepService {
         private final String storedBody;
 
         private StepAResult(boolean readyForStepB, boolean alreadyCompleted, boolean differentHashConflict,
-                            boolean inProgressNoResume, Deal deal, Payment feePayment, Payment depositPaymentToCancel,
+                            boolean inProgressNoResume, boolean feePaymentRecovered, Deal deal, Payment feePayment, Payment depositPaymentToCancel,
                             Integer storedStatus, String storedBody) {
             this.readyForStepB = readyForStepB;
             this.alreadyCompleted = alreadyCompleted;
             this.differentHashConflict = differentHashConflict;
             this.inProgressNoResume = inProgressNoResume;
+            this.feePaymentRecovered = feePaymentRecovered;
             this.deal = deal;
             this.feePayment = feePayment;
             this.depositPaymentToCancel = depositPaymentToCancel;
@@ -67,20 +69,20 @@ public class DealCancellationStepService {
             this.storedBody = storedBody;
         }
 
-        public static StepAResult ready(Deal deal, Payment feePayment, Payment depositPaymentToCancel) {
-            return new StepAResult(true, false, false, false, deal, feePayment, depositPaymentToCancel, null, null);
+        public static StepAResult ready(Deal deal, Payment feePayment, Payment depositPaymentToCancel, boolean feePaymentRecovered) {
+            return new StepAResult(true, false, false, false, feePaymentRecovered, deal, feePayment, depositPaymentToCancel, null, null);
         }
 
         public static StepAResult completed(int status, String body) {
-            return new StepAResult(false, true, false, false, null, null, null, status, body);
+            return new StepAResult(false, true, false, false, false, null, null, null, status, body);
         }
 
         public static StepAResult differentHash() {
-            return new StepAResult(false, false, true, false, null, null, null, null, null);
+            return new StepAResult(false, false, true, false, false, null, null, null, null, null);
         }
 
         public static StepAResult inProgress() {
-            return new StepAResult(false, false, false, true, null, null, null, null, null);
+            return new StepAResult(false, false, false, true, false, null, null, null, null, null);
         }
     }
 
@@ -138,7 +140,7 @@ public class DealCancellationStepService {
             keyEntity.setDeal(deal);
             idempotencyKeyRepository.save(keyEntity);
 
-            return StepAResult.ready(deal, feePayment, depositPaymentToCancel);
+            return StepAResult.ready(deal, feePayment, depositPaymentToCancel, false);
         } else {
             IdempotencyKey existingKey = idempotencyKeyRepository.findBySellerIdAndKeyWithDeal(sellerId, key).orElseThrow();
             if (!Objects.equals(existingKey.getRequestHash(), requestHash)) {
@@ -164,13 +166,13 @@ public class DealCancellationStepService {
                     if (feePayment != null && feePayment.getRazorpayLinkId() == null) {
                         int acquired = idempotencyKeyRepository.tryAcquireLock(sellerId, key, now, now.plusSeconds(30));
                         if (acquired == 1) {
-                            return StepAResult.ready(deal, feePayment, depositPaymentToCancel);
+                            return StepAResult.ready(deal, feePayment, depositPaymentToCancel, true);
                         }
                     }
                 } else {
                     int acquired = idempotencyKeyRepository.tryAcquireLock(sellerId, key, now, now.plusSeconds(30));
                     if (acquired == 1) {
-                        return StepAResult.ready(deal, null, depositPaymentToCancel);
+                        return StepAResult.ready(deal, null, depositPaymentToCancel, false);
                     }
                 }
             }
