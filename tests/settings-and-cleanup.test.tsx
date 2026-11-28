@@ -95,6 +95,13 @@ describe('Part B: Deletions, Cleanup, and Settings Page Migration', () => {
       const data = await res.json()
       expect(data.qstash).toBeUndefined()
     })
+
+    it('verifies next.config.js does not set ignoreBuildErrors or ignoreDuringBuilds to true', () => {
+      const nextConfigPath = path.join(rootDir, 'next.config.js')
+      const content = fs.readFileSync(nextConfigPath, 'utf-8')
+      expect(content).not.toMatch(/ignoreBuildErrors:\s*true/)
+      expect(content).not.toMatch(/ignoreDuringBuilds:\s*true/)
+    })
   })
 
   describe('Settings Page Migration to Core-API /api/v1/me', () => {

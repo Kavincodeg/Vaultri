@@ -4,10 +4,10 @@ const { withSentryConfig } = require('@sentry/nextjs')
 /** @type {import("next").NextConfig} */
 const nextConfig = {
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   experimental: {
     // Tell webpack not to bundle Node.js-only packages.
