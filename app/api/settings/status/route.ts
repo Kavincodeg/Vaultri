@@ -14,7 +14,6 @@ export async function GET() {
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID ?? ''
     const gmailUser = process.env.GMAIL_USER ?? ''
     const geminiKey = process.env.GEMINI_API_KEY ?? ''
-    const qstashToken = process.env.QSTASH_TOKEN ?? ''
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://vaultri.vercel.app'
 
     return NextResponse.json({
@@ -32,10 +31,6 @@ export async function GET() {
       ai: {
         configured: Boolean(geminiKey),
         model: 'Gemini 2.0 Flash',
-      },
-      qstash: {
-        configured: Boolean(qstashToken || process.env.QSTASH_CURRENT_SIGNING_KEY),
-        cronUrl: `${appUrl.replace(/\/$/, '')}/api/cron/check-reminders`,
       },
     })
   } catch (err: any) {

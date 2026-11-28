@@ -1,19 +1,45 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
+import { getAccessTokenOrThrow, NeedsRefreshError } from '@/lib/core-api/session'
+import { coreApiFetch } from '@/lib/core-api/server'
 import { ThemeSelector } from '@/components/ThemeSelector'
 import { ApiConfigSection } from '@/components/ApiConfigSection'
 
+interface SellerProfile {
+  id: string
+  email: string
+  name: string
+  phone?: string | null
+  plan: string
+}
+
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email) redirect('/auth/signin')
+  if (!session?.user || (session as any).error) redirect('/auth/signin')
 
-  const seller = await prisma.seller.findUnique({
-    where: { email: session.user.email },
-  })
+  let token: string
+  try {
+    token = await getAccessTokenOrThrow()
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      redirect('/auth/refreshing?next=' + encodeURIComponent('/dashboard/settings'))
+    }
+    redirect('/auth/signin')
+  }
 
-  if (!seller) redirect('/auth/signin')
+  let seller: SellerProfile
+  try {
+    seller = await coreApiFetch<SellerProfile>({
+      path: '/api/v1/me',
+      token,
+    })
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      redirect('/auth/refreshing?next=' + encodeURIComponent('/dashboard/settings'))
+    }
+    redirect('/auth/signin')
+  }
 
   return (
     <div className='container' style={{ paddingTop: '32px', paddingBottom: '48px' }}>
@@ -68,7 +94,7 @@ export default async function SettingsPage() {
             <div>
               <div className='form-label'>Plan</div>
               <div style={{ padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', color: 'var(--accent)' }}>
-                {seller.plan.toUpperCase()} Plan
+                {(seller.plan || 'free').toUpperCase()} Plan
               </div>
             </div>
           </div>
@@ -133,11 +159,11 @@ export default async function SettingsPage() {
           </div>
         </div>
 
-        {/* Info Section */}
+        {/* Support Info Section */}
         <div className='alert alert-info'>
           <span>ℹ️</span>
           <div>
-            Account created on {new Date(seller.createdAt).toLocaleDateString('en-IN')}. Need help? Contact support at support@vaultri.com
+            Need help? Contact support at support@vaultri.com
           </div>
         </div>
       </div>

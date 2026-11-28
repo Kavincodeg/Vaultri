@@ -18,10 +18,6 @@ interface ConfigStatus {
     configured: boolean
     model: string
   }
-  qstash: {
-    configured: boolean
-    cronUrl: string
-  }
 }
 
 export function ApiConfigSection() {
@@ -214,18 +210,12 @@ export function ApiConfigSection() {
                   </div>
                 </div>
 
-                {/* Gemini AI & Background Jobs */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {/* Gemini AI Agent */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                   <div style={{ padding: '12px', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '4px' }}>🤖 Gemini AI Agent</div>
                     <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{config?.ai.model}</div>
                     <span className='badge badge-paid' style={{ marginTop: '6px' }}>Ready</span>
-                  </div>
-
-                  <div style={{ padding: '12px', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '4px' }}>⏰ Upstash QStash</div>
-                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Cron Reminders (12h)</div>
-                    <span className='badge badge-paid' style={{ marginTop: '6px' }}>Active</span>
                   </div>
                 </div>
 
