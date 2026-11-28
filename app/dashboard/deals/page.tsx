@@ -1,8 +1,10 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+import { getAccessTokenOrThrow, NeedsRefreshError } from '@/lib/core-api/session'
+import { coreApiFetch } from '@/lib/core-api/server'
+import { mapDealStatus } from '@/lib/core-api/status-mapper'
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
@@ -34,24 +36,42 @@ function getAvatarLetter(name: string) {
 
 export default async function DealsPage() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email) redirect('/auth/signin')
+  if (!session?.user || (session as any).error) redirect('/auth/signin')
 
-  const seller = await prisma.seller.findUnique({
-    where: { email: session.user.email },
-    include: {
-      deals: {
-        orderBy: { createdAt: 'desc' },
-        include: { payments: true, reminders: true },
-      },
-    },
-  })
+  let token: string
+  try {
+    token = await getAccessTokenOrThrow()
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      redirect('/auth/refreshing?next=' + encodeURIComponent('/dashboard/deals'))
+    }
+    redirect('/auth/signin')
+  }
 
-  if (!seller) redirect('/auth/signin')
+  let dealsPage: { items: any[]; totalElements: number } = { items: [], totalElements: 0 }
+  try {
+    dealsPage = await coreApiFetch<{ items: any[]; totalElements: number }>({
+      path: '/api/v1/deals?page=0&size=100',
+      token,
+    })
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      redirect('/auth/refreshing?next=' + encodeURIComponent('/dashboard/deals'))
+    }
+  }
 
-  const deals = seller.deals
+  const deals = (dealsPage.items || []).map((d: any) => ({
+    id: d.id,
+    customerName: d.customerName,
+    description: d.title,
+    title: d.title,
+    price: d.price,
+    dueDate: d.dueDate,
+    status: mapDealStatus(d.status),
+    createdAt: d.createdAt,
+  }))
 
-  // Calculate stats
-  const totalDeals = deals.length
+  const totalDeals = dealsPage.totalElements
   const completedDeals = deals.filter((d) => d.status === 'completed').length
   const pendingDeals = deals.filter((d) => d.status === 'deposit_pending').length
   const inProgressDeals = deals.filter((d) => d.status === 'in_progress').length
@@ -66,6 +86,12 @@ export default async function DealsPage() {
         </div>
         <Link href='/dashboard/new' className='btn btn-primary'>+ New Deal</Link>
       </div>
+
+      {dealsPage.totalElements > deals.length && (
+        <div className='alert alert-info' style={{ marginBottom: '24px' }}>
+          Showing first {deals.length} of {dealsPage.totalElements} deals (metrics calculated on first {deals.length})
+        </div>
+      )}
 
       {/* Deal Metrics */}
       <div className='metrics-grid'>
@@ -98,25 +124,34 @@ export default async function DealsPage() {
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
         {deals.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No deals yet. <Link href='/dashboard/new' className='section-action'>Create your first deal →</Link>
+            No deals found.{' '}
+            <Link href='/dashboard/new' style={{ color: 'var(--accent)' }}>
+              Create your first deal →
+            </Link>
           </div>
         ) : (
           <table className='deals-table'>
             <thead>
               <tr>
                 <th>Customer</th>
-                <th>Description</th>
                 <th>Amount</th>
-                <th>Deposit %</th>
-                <th>Due Date</th>
                 <th>Status</th>
+                <th>Due Date</th>
+                <th>Created</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {deals.map((deal) => {
                 const { cls, label } = statusBadge(deal.status)
-                const dueDate = new Date(deal.dueDate).toLocaleDateString('en-IN', {
+                const dueDate = deal.dueDate
+                  ? new Date(deal.dueDate).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })
+                  : '—'
+                const createdAt = new Date(deal.createdAt).toLocaleDateString('en-IN', {
                   day: 'numeric',
                   month: 'short',
                   year: 'numeric',
@@ -129,26 +164,19 @@ export default async function DealsPage() {
                         <div className='deal-avatar'>{getAvatarLetter(deal.customerName)}</div>
                         <div>
                           <div className='name'>{deal.customerName}</div>
-                          {deal.customerEmail && (
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              {deal.customerEmail}
-                            </div>
-                          )}
+                          <div className='desc'>{deal.description.substring(0, 30)}...</div>
                         </div>
                       </div>
                     </td>
-                    <td style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                      {deal.description.substring(0, 40)}...
-                    </td>
                     <td>{formatRupees(deal.price)}</td>
-                    <td>{deal.depositPercent}%</td>
-                    <td>{dueDate}</td>
                     <td>
                       <span className={'badge ' + cls}>{label}</span>
                     </td>
+                    <td>{dueDate}</td>
+                    <td>{createdAt}</td>
                     <td>
                       <Link href={'/dashboard/' + deal.id} className='section-action'>
-                        View →
+                        View Details →
                       </Link>
                     </td>
                   </tr>

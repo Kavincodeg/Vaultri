@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface ReminderInfo {
@@ -37,16 +37,23 @@ export function DealActions({
   } | null>(null)
   const [completed, setCompleted] = useState(status === 'completed')
 
-  async function triggerAction(action: string, body: object) {
+  const cancelKeyRef = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '')
+  const lastCancelPayloadSigRef = useRef<string>('')
+
+  async function triggerAction(action: string, body: object, customHeaders?: Record<string, string>) {
     setLoading(action)
     setMessage(null)
     try {
       const res = await fetch('/api/' + action, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(customHeaders || {}) },
         body: JSON.stringify(body),
       })
       const data = await res.json()
+      if (res.status === 401 && data.code === 'session_refresh') {
+        router.push('/auth/refreshing?next=' + encodeURIComponent(window.location.pathname))
+        return null
+      }
       if (!res.ok) throw new Error(data.error ?? 'Request failed')
       return data
     } catch (err: any) {
@@ -67,18 +74,39 @@ export function DealActions({
   }
 
   async function handleCancellation() {
-    const result = await triggerAction('cancellation', { dealId, customerName, totalPrice, description })
+    const payloadSig = `${dealId}:${description}:${totalPrice}`
+    if (lastCancelPayloadSigRef.current && lastCancelPayloadSigRef.current !== payloadSig) {
+      // Rotate when payload values (dealId, reason/description, fee) change
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        cancelKeyRef.current = crypto.randomUUID()
+      }
+    }
+    if (!cancelKeyRef.current && typeof crypto !== 'undefined' && crypto.randomUUID) {
+      cancelKeyRef.current = crypto.randomUUID()
+    }
+    lastCancelPayloadSigRef.current = payloadSig
+
+    const result = await triggerAction(
+      'cancellation',
+      { dealId, customerName, totalPrice, description },
+      { 'Idempotency-Key': cancelKeyRef.current }
+    )
     if (result) {
+      // Rotate key after success
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        cancelKeyRef.current = crypto.randomUUID()
+      }
+      lastCancelPayloadSigRef.current = ''
       setCancResult(result)
       setMessage({ type: 'success', text: 'Cancellation fee link generated.' })
       router.refresh()
     }
   }
 
-  async function handleSendReminder(reminderId: string) {
-    const result = await triggerAction('reminders', { reminderId })
+  async function handleSendReminder(_reminderId?: string) {
+    const result = await triggerAction('reminders', { dealId })
     if (result) {
-      setMessage({ type: 'success', text: 'Reminder sent successfully.' })
+      setMessage({ type: 'success', text: 'Reminder queued successfully.' })
       router.refresh()
     }
   }
@@ -159,11 +187,11 @@ export function DealActions({
             ))}
           </div>
 
-          {/* Manual send button for pending reminders */}
+          {/* Manual queue button for pending reminders */}
           {pendingReminderIds.length > 0 && (
             <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: '1.5' }}>
-                Manually trigger now — seller will receive an email.
+                Manually trigger now — reminder will be queued for dispatch.
               </p>
               <button
                 id='btn-send-reminder'
@@ -173,8 +201,8 @@ export function DealActions({
                 disabled={loading === 'reminders'}
               >
                 {loading === 'reminders'
-                  ? <><span className='spinner' />&nbsp;Sending...</>
-                  : '🔔 Send Reminder Now'}
+                  ? <><span className='spinner' />&nbsp;Queuing...</>
+                  : '🔔 Queue Reminder Now'}
               </button>
             </div>
           )}
@@ -190,8 +218,8 @@ export function DealActions({
                 disabled={loading === 'reminders'}
               >
                 {loading === 'reminders'
-                  ? <><span className='spinner' />&nbsp;Retrying...</>
-                  : '🔁 Retry Failed Reminder'}
+                  ? <><span className='spinner' />&nbsp;Queuing...</>
+                  : '🔁 Queue Retry for Reminder'}
               </button>
             </div>
           )}

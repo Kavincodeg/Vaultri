@@ -21,8 +21,21 @@ export default function NewDealPage() {
   const [dueDate, setDueDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() =>
+    typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ''
+  )
 
-  if (status === 'unauthenticated' || (status === 'authenticated' && !session?.user)) { router.push('/auth/signin'); return null }
+  function onFormChange<T>(setter: (v: T) => void, val: T) {
+    setter(val)
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      setIdempotencyKey(crypto.randomUUID())
+    }
+  }
+
+  if (status === 'unauthenticated' || (status === 'authenticated' && (!session?.user || (session as any).error))) {
+    router.push('/auth/signin')
+    return null
+  }
 
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
@@ -38,10 +51,15 @@ export default function NewDealPage() {
     if (!customerName.trim()) { setError('Customer name is required'); return }
     setLoading(true)
     try {
+      const activeKey = idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '')
       const res = await fetch('/api/deals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': activeKey,
+        },
         body: JSON.stringify({
+          title: description.trim(),
           description: description.trim(),
           customerName: customerName.trim(),
           customerEmail: customerEmail.trim() || null,
@@ -51,7 +69,15 @@ export default function NewDealPage() {
         }),
       })
       const data = await res.json()
+      if (res.status === 401 && data.code === 'session_refresh') {
+        router.push('/auth/refreshing?next=' + encodeURIComponent(window.location.pathname))
+        return
+      }
       if (!res.ok) throw new Error(data.error ?? 'Failed to create deal')
+      // Reset idempotency key on success
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        setIdempotencyKey(crypto.randomUUID())
+      }
       router.push('/dashboard/' + data.dealId)
     } catch (err: any) {
       setError(err.message ?? 'Something went wrong')
@@ -78,7 +104,7 @@ export default function NewDealPage() {
                 className='form-textarea'
                 placeholder='e.g. Priya wants a custom gold necklace, total INR 8000, needs it by September 15'
                 value={description}
-                onChange={e => setDescription(e.target.value)}
+                onChange={e => onFormChange(setDescription, e.target.value)}
                 style={{ minHeight: '120px' }}
                 required
               />
@@ -88,26 +114,26 @@ export default function NewDealPage() {
             <div className='form-grid'>
               <div className='form-group'>
                 <label className='form-label' htmlFor='customer-name'>Customer name <span style={{ color: 'var(--accent-h)' }}>*</span></label>
-                <input id='customer-name' type='text' className='form-input' placeholder='e.g. Priya Sharma' value={customerName} onChange={e => setCustomerName(e.target.value)} required />
+                <input id='customer-name' type='text' className='form-input' placeholder='e.g. Priya Sharma' value={customerName} onChange={e => onFormChange(setCustomerName, e.target.value)} required />
               </div>
               <div className='form-group'>
                 <label className='form-label' htmlFor='customer-email'>Customer email (optional — for reminders)</label>
-                <input id='customer-email' type='email' className='form-input' placeholder='e.g. priya@example.com' value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+                <input id='customer-email' type='email' className='form-input' placeholder='e.g. priya@example.com' value={customerEmail} onChange={e => onFormChange(setCustomerEmail, e.target.value)} />
               </div>
             </div>
             <div className='form-grid'>
               <div className='form-group'>
                 <label className='form-label' htmlFor='customer-phone'>Customer phone (optional)</label>
-                <input id='customer-phone' type='tel' className='form-input' placeholder='+91 99999 00000' value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+                <input id='customer-phone' type='tel' className='form-input' placeholder='+91 99999 00000' value={customerPhone} onChange={e => onFormChange(setCustomerPhone, e.target.value)} />
               </div>
               <div className='form-group'>
                 <label className='form-label' htmlFor='deal-price'>Total price (INR) <span style={{ color: 'var(--accent-h)' }}>*</span></label>
-                <input id='deal-price' type='number' className='form-input' placeholder='e.g. 8000' value={price} onChange={e => setPrice(e.target.value)} min='1' step='1' required />
+                <input id='deal-price' type='number' className='form-input' placeholder='e.g. 8000' value={price} onChange={e => onFormChange(setPrice, e.target.value)} min='1' step='1' required />
               </div>
             </div>
             <div className='form-group'>
               <label className='form-label' htmlFor='deal-due-date'>Due / delivery date <span style={{ color: 'var(--accent-h)' }}>*</span></label>
-              <input id='deal-due-date' type='date' className='form-input' value={dueDate} onChange={e => setDueDate(e.target.value)} min={minDate} required />
+              <input id='deal-due-date' type='date' className='form-input' value={dueDate} onChange={e => onFormChange(setDueDate, e.target.value)} min={minDate} required />
             </div>
             {error && <div className='alert alert-error' id='form-error'>{error}</div>}
             <button id='btn-create-deal-submit' type='submit' className='btn btn-primary'

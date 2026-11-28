@@ -1,54 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { logAudit } from '@/lib/audit'
-
-// Allowed statuses that can transition to completed
-const COMPLETABLE = new Set(['deposit_paid', 'in_progress'])
+import { getAccessTokenOrThrow, NeedsRefreshError } from '@/lib/core-api/session'
+import {
+  coreApiFetch,
+  extractClientIp,
+  NotFoundError,
+  ConflictError,
+  UnauthorizedError,
+} from '@/lib/core-api/server'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  let token: string
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    token = await getAccessTokenOrThrow(req)
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      return NextResponse.json({ code: 'session_refresh' }, { status: 401 })
     }
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-    const seller = await prisma.seller.findUnique({ where: { email: session.user.email } })
-    if (!seller) return NextResponse.json({ error: 'Seller not found' }, { status: 404 })
+  const dealId = params?.id
+  if (!dealId) {
+    return NextResponse.json({ error: 'Deal ID is required' }, { status: 400 })
+  }
 
-    // Verify deal belongs to this seller
-    const deal = await prisma.deal.findFirst({
-      where: { id: params.id, sellerId: seller.id },
+  try {
+    await coreApiFetch({
+      method: 'POST',
+      path: `/api/v1/deals/${encodeURIComponent(dealId)}/complete`,
+      token,
+      clientIp: extractClientIp(req.headers),
     })
-    if (!deal) return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
-
-    if (deal.status === 'completed') {
-      return NextResponse.json({ error: 'Deal is already marked as completed' }, { status: 400 })
-    }
-    if (deal.status === 'cancelled') {
-      return NextResponse.json({ error: 'Cannot complete a cancelled deal' }, { status: 400 })
-    }
-    if (!COMPLETABLE.has(deal.status)) {
-      return NextResponse.json(
-        { error: 'Deal must be in deposit_paid or in_progress state to mark as completed' },
-        { status: 400 }
-      )
-    }
-
-    await prisma.deal.update({
-      where: { id: deal.id },
-      data: { status: 'completed' },
-    })
-
-    await logAudit(deal.id, 'deal_completed', 'Seller marked deal as completed')
 
     return NextResponse.json({ success: true })
-  } catch (err: any) {
-    console.error('[/api/deals/[id]/complete]', err)
-    return NextResponse.json({ error: err.message ?? 'Internal server error' }, { status: 500 })
+  } catch (err: unknown) {
+    if (err instanceof NotFoundError) {
+      return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
+    }
+    if (err instanceof ConflictError) {
+      return NextResponse.json({ error: 'Illegal deal transition' }, { status: 409 })
+    }
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ code: 'session_refresh' }, { status: 401 })
+    }
+    return NextResponse.json({ error: 'Failed to complete deal' }, { status: 500 })
   }
 }

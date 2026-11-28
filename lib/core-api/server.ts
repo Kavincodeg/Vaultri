@@ -29,9 +29,25 @@ export class ValidationError extends Error {
 }
 
 export class ConflictError extends Error {
-  constructor(message = 'Conflict') {
+  readonly retryAfter?: number
+  constructor(message = 'Conflict', retryAfter?: number) {
     super(message)
     this.name = 'ConflictError'
+    this.retryAfter = retryAfter
+  }
+}
+
+export class NotFoundError extends Error {
+  constructor(message = 'Not found') {
+    super(message)
+    this.name = 'NotFoundError'
+  }
+}
+
+export class UnprocessableEntityError extends Error {
+  constructor(message = 'Unprocessable entity') {
+    super(message)
+    this.name = 'UnprocessableEntityError'
   }
 }
 
@@ -96,6 +112,8 @@ export interface CoreApiRequestOptions {
   body?: unknown
   token?: string
   clientIp?: string | null
+  idempotencyKey?: string | null
+  headers?: Record<string, string>
 }
 
 export async function coreApiFetch<T>(options: CoreApiRequestOptions): Promise<T> {
@@ -108,6 +126,7 @@ export async function coreApiFetch<T>(options: CoreApiRequestOptions): Promise<T
 
   const headers: Record<string, string> = {
     'Accept': 'application/json',
+    ...(options.headers || {}),
   }
 
   if (options.body !== undefined) {
@@ -116,6 +135,10 @@ export async function coreApiFetch<T>(options: CoreApiRequestOptions): Promise<T
 
   if (options.token) {
     headers['Authorization'] = `Bearer ${options.token}`
+  }
+
+  if (options.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey
   }
 
   // Client IP Forwarding:
@@ -141,8 +164,14 @@ export async function coreApiFetch<T>(options: CoreApiRequestOptions): Promise<T
       if (response.status === 401) {
         throw new UnauthorizedError()
       }
+      if (response.status === 404) {
+        throw new NotFoundError()
+      }
+      if (response.status === 422) {
+        throw new UnprocessableEntityError()
+      }
       if (response.status === 429) {
-        const retryAfterHeader = response.headers.get('retry-after')
+        const retryAfterHeader = typeof response.headers?.get === 'function' ? response.headers.get('retry-after') : null
         let retryAfter = 60
         if (retryAfterHeader) {
           const parsed = parseInt(retryAfterHeader, 10)
@@ -152,22 +181,41 @@ export async function coreApiFetch<T>(options: CoreApiRequestOptions): Promise<T
         }
         throw new RateLimitedError(retryAfter)
       }
-      if (response.status === 400 || response.status === 422) {
-        throw new ValidationError()
-      }
       if (response.status === 409) {
-        throw new ConflictError()
+        const retryAfterHeader = typeof response.headers?.get === 'function' ? response.headers.get('retry-after') : null
+        let retryAfter: number | undefined
+        if (retryAfterHeader) {
+          const parsed = parseInt(retryAfterHeader, 10)
+          if (!isNaN(parsed) && parsed > 0) {
+            retryAfter = parsed
+          }
+        }
+        throw new ConflictError('Conflict', retryAfter)
+      }
+      if (response.status === 400) {
+        throw new ValidationError()
       }
       throw new UnavailableError('Service returned an error status')
     }
 
-    if (response.status === 204) {
+    if (response.status === 204 || response.status === 202) {
+      if (typeof response.text === 'function') {
+        try {
+          const text = await response.text()
+          if (!text || text.trim().length === 0) return undefined as T
+          return JSON.parse(text) as T
+        } catch {
+          return undefined as T
+        }
+      }
       return undefined as T
     }
 
     return (await response.json()) as T
   } catch (error: unknown) {
     if (error instanceof UnauthorizedError ||
+        error instanceof NotFoundError ||
+        error instanceof UnprocessableEntityError ||
         error instanceof RateLimitedError ||
         error instanceof ValidationError ||
         error instanceof ConflictError ||

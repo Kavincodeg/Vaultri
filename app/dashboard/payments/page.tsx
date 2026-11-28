@@ -1,8 +1,10 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+import { getAccessTokenOrThrow, NeedsRefreshError } from '@/lib/core-api/session'
+import { coreApiFetch } from '@/lib/core-api/server'
+import { mapPaymentStatus, mapPaymentType } from '@/lib/core-api/status-mapper'
 
 function paymentStatusBadge(status: string) {
   const map: Record<string, string> = {
@@ -10,12 +12,14 @@ function paymentStatusBadge(status: string) {
     expired: 'badge-expired',
     completed: 'badge-paid',
     failed: 'badge-cancelled',
+    cancelled: 'badge-cancelled',
   }
   const label: Record<string, string> = {
     created: 'Pending',
     expired: 'Expired',
     completed: 'Paid',
     failed: 'Failed',
+    cancelled: 'Cancelled',
   }
   return { cls: map[status] ?? 'badge-draft', label: label[status] ?? status }
 }
@@ -26,32 +30,43 @@ function formatRupees(paise: number) {
 
 export default async function PaymentsPage() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email) redirect('/auth/signin')
+  if (!session?.user || (session as any).error) redirect('/auth/signin')
 
-  const seller = await prisma.seller.findUnique({
-    where: { email: session.user.email },
-    include: {
-      deals: {
-        include: {
-          payments: { orderBy: { createdAt: 'desc' } },
-        },
-      },
-    },
-  })
+  let token: string
+  try {
+    token = await getAccessTokenOrThrow()
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      redirect('/auth/refreshing?next=' + encodeURIComponent('/dashboard/payments'))
+    }
+    redirect('/auth/signin')
+  }
 
-  if (!seller) redirect('/auth/signin')
+  let pageData: { items: any[]; totalElements: number } = { items: [], totalElements: 0 }
+  try {
+    pageData = await coreApiFetch<{ items: any[]; totalElements: number }>({
+      path: '/api/v1/payments?page=0&size=100',
+      token,
+    })
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      redirect('/auth/refreshing?next=' + encodeURIComponent('/dashboard/payments'))
+    }
+  }
 
-  // Flatten all payments across deals
-  const allPayments = seller.deals.flatMap((deal) =>
-    deal.payments.map((p) => ({
-      ...p,
-      dealId: deal.id,
-      customerName: deal.customerName,
-    }))
-  )
+  const allPayments = (pageData.items || []).map((p: any) => ({
+    id: p.id,
+    dealId: p.dealId,
+    dealTitle: p.dealTitle,
+    customerName: p.dealTitle,
+    type: mapPaymentType(p.type),
+    status: mapPaymentStatus(p.status),
+    amount: p.amount,
+    shortUrl: p.paymentUrl,
+    createdAt: p.createdAt,
+  }))
 
-  // Calculate payment stats
-  const totalPayments = allPayments.length
+  const totalPayments = pageData.totalElements
   const paidPayments = allPayments.filter((p) => p.status === 'completed').length
   const pendingPayments = allPayments.filter((p) => p.status === 'created').length
   const totalAmount = allPayments.reduce((sum, p) => sum + p.amount, 0)
@@ -66,7 +81,13 @@ export default async function PaymentsPage() {
         </div>
       </div>
 
-      {/* Payment Metrics */}
+      {pageData.totalElements > allPayments.length && (
+        <div className='alert alert-info' style={{ marginBottom: '24px' }}>
+          Showing first {allPayments.length} of {pageData.totalElements} payments (metrics calculated on first {allPayments.length})
+        </div>
+      )}
+
+      {/* Metrics */}
       <div className='metrics-grid'>
         <div className='metric-card'>
           <div className='metric-icon'>💳</div>
@@ -97,25 +118,24 @@ export default async function PaymentsPage() {
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
         {allPayments.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No payments yet
+            No payments found yet.
           </div>
         ) : (
           <table className='deals-table'>
             <thead>
               <tr>
-                <th>Payment Link</th>
-                <th>Customer</th>
-                <th>Amount</th>
+                <th>Deal</th>
                 <th>Type</th>
+                <th>Amount</th>
                 <th>Status</th>
+                <th>Link</th>
                 <th>Created</th>
-                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {allPayments.map((payment) => {
                 const { cls, label } = paymentStatusBadge(payment.status)
-                const createdDate = new Date(payment.createdAt).toLocaleDateString('en-IN', {
+                const createdAt = new Date(payment.createdAt).toLocaleDateString('en-IN', {
                   day: 'numeric',
                   month: 'short',
                   year: 'numeric',
@@ -124,22 +144,29 @@ export default async function PaymentsPage() {
                 return (
                   <tr key={payment.id}>
                     <td>
-                      <code style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>
-                        {payment.razorpayLinkId?.substring(0, 12)}...
-                      </code>
+                      <Link href={'/dashboard/' + payment.dealId} style={{ color: 'var(--text)', fontWeight: 500 }}>
+                        {payment.dealTitle}
+                      </Link>
                     </td>
-                    <td>{payment.customerName || 'N/A'}</td>
+                    <td>
+                      <span style={{ textTransform: 'capitalize' }}>
+                        {payment.type.replace('_', ' ')}
+                      </span>
+                    </td>
                     <td>{formatRupees(payment.amount)}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{payment.type}</td>
                     <td>
                       <span className={'badge ' + cls}>{label}</span>
                     </td>
-                    <td>{createdDate}</td>
                     <td>
-                      <Link href={`/dashboard/${payment.dealId}`} className='section-action'>
-                        View →
-                      </Link>
+                      {payment.shortUrl ? (
+                        <a href={payment.shortUrl} target='_blank' rel='noopener noreferrer' className='section-action'>
+                          Open ↗
+                        </a>
+                      ) : (
+                        '—'
+                      )}
                     </td>
+                    <td>{createdAt}</td>
                   </tr>
                 )
               })}

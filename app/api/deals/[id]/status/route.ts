@@ -1,36 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { getAccessTokenOrThrow, NeedsRefreshError } from '@/lib/core-api/session'
+import {
+  coreApiFetch,
+  extractClientIp,
+  NotFoundError,
+  UnauthorizedError,
+} from '@/lib/core-api/server'
+import { mapDealStatus, mapPaymentStatus } from '@/lib/core-api/status-mapper'
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  let token: string
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    token = await getAccessTokenOrThrow(req)
+  } catch (err) {
+    if (err instanceof NeedsRefreshError) {
+      return NextResponse.json({ code: 'session_refresh' }, { status: 401 })
     }
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-    const seller = await prisma.seller.findUnique({ where: { email: session.user.email } })
-    if (!seller) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const dealId = params?.id
+  if (!dealId) {
+    return NextResponse.json({ error: 'Deal ID is required' }, { status: 400 })
+  }
 
-    const deal = await prisma.deal.findFirst({
-      where: { id: params.id, sellerId: seller.id },
-      select: {
-        status: true,
-        payments: { where: { type: 'deposit' }, select: { status: true }, take: 1 },
-      },
+  try {
+    const deal = await coreApiFetch<any>({
+      method: 'GET',
+      path: `/api/v1/deals/${encodeURIComponent(dealId)}`,
+      token,
+      clientIp: extractClientIp(req.headers),
     })
-
-    if (!deal) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     return NextResponse.json({
-      dealStatus: deal.status,
-      depositStatus: deal.payments[0]?.status ?? null,
+      dealStatus: mapDealStatus(deal.status),
+      depositStatus: deal.depositPayment ? mapPaymentStatus(deal.depositPayment.status) : null,
     })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    if (err instanceof NotFoundError) {
+      return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
+    }
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ code: 'session_refresh' }, { status: 401 })
+    }
+    return NextResponse.json({ error: 'Failed to fetch deal status' }, { status: 500 })
   }
 }
