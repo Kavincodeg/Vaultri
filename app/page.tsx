@@ -72,12 +72,12 @@ const FEATURES = [
 ]
 
 export default function HomePage() {
-  const { status } = useSession()
+  const { data: session, status } = useSession()
   const router = useRouter()
 
   useEffect(() => {
-    if (status === 'authenticated') router.push('/dashboard')
-  }, [status, router])
+    if (status === 'authenticated' && session?.user && !(session as any)?.error) router.push('/dashboard')
+  }, [status, session, router])
 
   return (
     <div className='hero'>

@@ -6,7 +6,6 @@ import {
   extractClientIp,
   RateLimitedError,
   UnauthorizedError,
-  UnavailableError,
 } from '@/lib/core-api/server'
 
 interface CoreLoginResponse {
@@ -22,56 +21,6 @@ interface CoreMeResponse {
   name: string
   phone?: string | null
   plan?: string
-}
-
-interface RefreshResult {
-  accessToken: string
-  refreshToken: string
-  accessExpiresAt: number
-  refreshExpiresAt: number
-}
-
-// In-flight refresh promises map for deduplication within the same server process
-const inFlightRefreshes = new Map<string, Promise<RefreshResult>>()
-
-// Track last refresh failure time per refresh token to enforce 30s cooldown before retrying
-const refreshCooldowns = new Map<string, number>()
-
-/**
- * Performs token rotation via core-api POST /auth/refresh with single in-flight deduplication.
- */
-export async function refreshAccessToken(refreshToken: string): Promise<RefreshResult> {
-  const existing = inFlightRefreshes.get(refreshToken)
-  if (existing) {
-    return existing
-  }
-
-  const promise = (async () => {
-    try {
-      const res = await coreApiFetch<CoreLoginResponse>({
-        method: 'POST',
-        path: '/api/v1/auth/refresh',
-        body: { refreshToken },
-      })
-      const now = Math.floor(Date.now() / 1000)
-      const result: RefreshResult = {
-        accessToken: res.accessToken,
-        refreshToken: res.refreshToken,
-        accessExpiresAt: now + (res.expiresIn || 900),
-        refreshExpiresAt: now + 7 * 24 * 60 * 60,
-      }
-      refreshCooldowns.delete(refreshToken)
-      return result
-    } catch (err) {
-      refreshCooldowns.set(refreshToken, Date.now())
-      throw err
-    } finally {
-      inFlightRefreshes.delete(refreshToken)
-    }
-  })()
-
-  inFlightRefreshes.set(refreshToken, promise)
-  return promise
 }
 
 export const authOptions: NextAuthOptions = {
@@ -146,7 +95,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       const now = Math.floor(Date.now() / 1000)
 
       // Initial sign-in
@@ -168,46 +117,54 @@ export const authOptions: NextAuthOptions = {
         token.accessExpiresAt = u.accessExpiresAt
         token.refreshExpiresAt = u.refreshExpiresAt
         token.error = false
+        token.transientError = false
         return token
       }
 
-      // Subsequent reads: Proactive refresh within 60s of expiry
-      const accessExpiresAt = (token.accessExpiresAt as number) || 0
-      const isNearExpiry = now >= accessExpiresAt - 60
-      const refreshToken = token.refreshToken as string | undefined
+      // Design 1: Refresh ONLY when trigger === 'update' (client-initiated NextAuth route handler call)
+      // AND access token is within 300 seconds of expiry or already expired.
+      // On every other call (getServerSession, GET /api/auth/session, middleware, trigger undefined),
+      // NEVER call core-api refresh and return token unchanged.
+      if (trigger === 'update') {
+        const accessExpiresAt = (token.accessExpiresAt as number) || 0
+        const isNearExpiry = now >= accessExpiresAt - 300
+        const refreshToken = token.refreshToken as string | undefined
 
-      if (!isNearExpiry || !refreshToken) {
-        return token
+        if (isNearExpiry && refreshToken) {
+          try {
+            const res = await coreApiFetch<CoreLoginResponse>({
+              method: 'POST',
+              path: '/api/v1/auth/refresh',
+              body: { refreshToken },
+            })
+            token.accessToken = res.accessToken
+            token.refreshToken = res.refreshToken
+            token.accessExpiresAt = now + (res.expiresIn || 900)
+            token.refreshExpiresAt = now + 7 * 24 * 60 * 60
+            token.error = false
+            token.transientError = false
+            return token
+          } catch (err) {
+            if (err instanceof UnauthorizedError) {
+              // 401 from core-api: the refresh token is dead; set error flag so session callback reports no usable session
+              token.error = true
+              token.transientError = false
+              return token
+            }
+            // 429, 5xx, timeout: keep the token, set transient flag, do not end session (client retries later), never loop
+            token.error = false
+            token.transientError = true
+            return token
+          }
+        }
       }
 
-      // Check if this refresh token recently failed (30s cooldown)
-      const lastFailed = refreshCooldowns.get(refreshToken)
-      if (lastFailed && Date.now() - lastFailed < 30000) {
-        token.error = true
-        return token
-      }
-
-      try {
-        const refreshed = await refreshAccessToken(refreshToken)
-        token.accessToken = refreshed.accessToken
-        token.refreshToken = refreshed.refreshToken
-        token.accessExpiresAt = refreshed.accessExpiresAt
-        token.refreshExpiresAt = refreshed.refreshExpiresAt
-        token.error = false
-        return token
-      } catch (err) {
-        // Soft refresh failure: keep existing token, set error flag
-        token.error = true
-        return token
-      }
+      return token
     },
 
     async session({ session, token }) {
-      const now = Math.floor(Date.now() / 1000)
-      const accessExpiresAt = (token.accessExpiresAt as number) || 0
-
-      // If access token is expired AND refresh has failed, session is no longer usable
-      if (token.error && now >= accessExpiresAt) {
+      // If refresh token is dead (401 from core-api), report no usable session
+      if (token.error) {
         return {
           user: undefined,
           expires: session.expires,
@@ -215,6 +172,8 @@ export const authOptions: NextAuthOptions = {
         } as unknown as typeof session
       }
 
+      // Session must contain ONLY sellerId, email, name, and optional error flag.
+      // No tokens at any depth of the session object.
       return {
         user: {
           sellerId: token.sub,
@@ -222,7 +181,6 @@ export const authOptions: NextAuthOptions = {
           name: token.name,
         },
         expires: session.expires,
-        ...(token.error ? { error: true } : {}),
       } as typeof session
     },
   },

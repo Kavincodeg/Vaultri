@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { Nav } from "@/components/Nav"
 import { Providers } from "@/components/Providers"
 import { LayoutWrapper } from "@/components/LayoutWrapper"
@@ -22,11 +24,13 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await getServerSession(authOptions)
+
   return (
     <html lang="en">
       <body>
-        <Providers>
+        <Providers session={session}>
           <LayoutWrapper>
             <Nav />
             <main>{children}</main>

@@ -7,8 +7,8 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession()
   const pathname = usePathname()
 
-  // Only show sidebar on dashboard pages
-  const showSidebar = session && (pathname.startsWith('/dashboard') || pathname.startsWith('/profile'))
+  // Only show sidebar on dashboard pages for authenticated users with a usable session
+  const showSidebar = !!session?.user && (pathname.startsWith('/dashboard') || pathname.startsWith('/profile'))
 
   return (
     <div id='root-layout'>

@@ -23,14 +23,14 @@ export function Nav() {
             <span>VAULTRI</span>
           </Link>
         )}
-        {!showLogo && session && (
+        {!showLogo && session?.user && (
           <div className='nav-brand' style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
             Good morning, <strong>{session.user?.name}</strong>
           </div>
         )}
         <div className='nav-actions'>
           <ThemeToggle />
-          {session ? (
+          {session?.user ? (
             <>
               {pathname.startsWith('/dashboard') && (
                 <Link href='/dashboard/new' className='btn btn-primary btn-sm'>+ New Deal</Link>

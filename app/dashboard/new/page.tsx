@@ -11,7 +11,7 @@ const EXAMPLES = [
 ]
 
 export default function NewDealPage() {
-  const { status } = useSession()
+  const { data: session, status } = useSession()
   const router = useRouter()
   const [description, setDescription] = useState('')
   const [customerName, setCustomerName] = useState('')
@@ -22,7 +22,7 @@ export default function NewDealPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  if (status === 'unauthenticated') { router.push('/auth/signin'); return null }
+  if (status === 'unauthenticated' || (status === 'authenticated' && !session?.user)) { router.push('/auth/signin'); return null }
 
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)

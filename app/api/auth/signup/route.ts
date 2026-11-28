@@ -17,17 +17,52 @@ interface CoreSellerResponse {
 }
 
 export async function POST(req: NextRequest) {
+  let body: any
   try {
-    const body = await req.json()
-    const { name, email, password, phone } = body || {}
+    body = await req.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid signup data' },
+      { status: 400 }
+    )
+  }
 
-    if (!name || !email || !password) {
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json(
+      { error: 'Invalid signup data' },
+      { status: 400 }
+    )
+  }
+
+  const { name, email, password, phone } = body
+
+  if (
+    typeof name !== 'string' ||
+    typeof email !== 'string' ||
+    typeof password !== 'string' ||
+    name.length === 0 ||
+    email.length === 0 ||
+    password.length === 0 ||
+    name.length > 254 ||
+    email.length > 254 ||
+    password.length > 128
+  ) {
+    return NextResponse.json(
+      { error: 'Invalid signup data' },
+      { status: 400 }
+    )
+  }
+
+  if (phone !== undefined && phone !== null) {
+    if (typeof phone !== 'string' || phone.length > 32) {
       return NextResponse.json(
-        { error: 'Name, email, and password are required' },
+        { error: 'Invalid signup data' },
         { status: 400 }
       )
     }
+  }
 
+  try {
     const clientIp = extractClientIp(req.headers)
 
     const seller = await coreApiFetch<CoreSellerResponse>({
@@ -42,9 +77,6 @@ export async function POST(req: NextRequest) {
         id: seller.id,
         email: seller.email,
         name: seller.name,
-        phone: seller.phone ?? null,
-        plan: seller.plan,
-        createdAt: seller.createdAt,
       },
       { status: 201 }
     )
