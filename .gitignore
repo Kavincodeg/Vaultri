@@ -47,3 +47,4 @@ tsc-output.txt
 lint-output.txt
 build-output.txt
 
+test-verbose.txt

@@ -297,6 +297,27 @@ describe('Core API Client & Auth Migration Tests', () => {
       expect((session?.user as any)?.sellerId).toBe('seller-1')
       expect((session as any)?.error).toBeUndefined()
     })
+
+    it('update with error: true makes zero refresh calls and returns token unchanged even when near expiry', async () => {
+      const fetchMock = vi.fn()
+      global.fetch = fetchMock
+
+      const now = Math.floor(Date.now() / 1000)
+      const token = {
+        sub: 'seller-dead',
+        email: 'seller@example.com',
+        accessToken: 'access-dead',
+        refreshToken: 'refresh-dead',
+        accessExpiresAt: now + 100, // Near expiry (< 300s)
+        refreshExpiresAt: now + 600000,
+        error: true,
+      }
+
+      // @ts-expect-error NextAuth callback signature
+      const resToken = await authOptions.callbacks?.jwt?.({ token: { ...token }, user: undefined, trigger: 'update' })
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(resToken).toEqual(token)
+    })
   })
 
   describe('3. Cookie Persistence Simulation', () => {
@@ -958,19 +979,19 @@ describe('Core API Client & Auth Migration Tests', () => {
   describe('10. Regression: JWT Callback Session Argument Injection', () => {
     it('ignores session argument on trigger "update" and prevents value injection into token', async () => {
       const now = Math.floor(Date.now() / 1000)
-      const token = {
+      const originalToken = {
         sub: 'seller-orig-id',
         email: 'seller@example.com',
         accessToken: 'orig-access-token',
         refreshToken: 'orig-refresh-token',
         accessExpiresAt: now + 500, // not near expiry, so no refresh call is made
         refreshExpiresAt: now + 600000,
-        error: true,
+        error: false,
       }
 
       // Invoke jwt callback with trigger 'update' and third argument session containing injected fields
       const res = await authOptions.callbacks?.jwt?.({
-        token: { ...token },
+        token: { ...originalToken },
         user: undefined,
         trigger: 'update',
         session: {
@@ -981,18 +1002,8 @@ describe('Core API Client & Auth Migration Tests', () => {
         },
       } as any)
 
-      // Assert none of those values reach the returned token
-      expect(res?.accessToken).not.toBe('x')
-      expect(res?.refreshToken).not.toBe('y')
-      expect((res as any)?.sellerId).toBeUndefined()
-      expect(res?.sub).not.toBe('someone-else')
-      expect(res?.error).not.toBe(false)
-
-      // Assert original token values are preserved
-      expect(res?.accessToken).toBe('orig-access-token')
-      expect(res?.refreshToken).toBe('orig-refresh-token')
-      expect(res?.sub).toBe('seller-orig-id')
-      expect(res?.error).toBe(true)
+      // Assert original token is returned completely unchanged
+      expect(res).toEqual(originalToken)
     })
   })
 

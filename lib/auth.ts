@@ -126,6 +126,8 @@ export const authOptions: NextAuthOptions = {
       // On every other call (getServerSession, GET /api/auth/session, middleware, trigger undefined),
       // NEVER call core-api refresh and return token unchanged.
       if (trigger === 'update') {
+        if (token.error) return token
+
         const accessExpiresAt = (token.accessExpiresAt as number) || 0
         const isNearExpiry = now >= accessExpiresAt - 300
         const refreshToken = token.refreshToken as string | undefined
